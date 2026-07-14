@@ -20,8 +20,10 @@ export type PaymentImportRow = {
   originalDueDate: string;
   currentDueDate: string;
   costCenter: string;
+  /** Ausente quando a conta ainda nao existe: e criada na confirmacao. */
   workId?: string;
   workName?: string;
+  isNewWork: boolean;
   uniqueKey: string;
   errors: string[];
   duplicate: boolean;
@@ -34,6 +36,7 @@ export type ImportContributionRow = {
   amount: number;
   workId?: string;
   workName?: string;
+  isNewWork: boolean;
   errors: string[];
 };
 
@@ -53,6 +56,8 @@ export type ImportSummaryCheck = {
 export type ImportPreview = {
   fileName: string;
   missingColumns: string[];
+  /** Centros de custo da planilha que ainda nao tem conta cadastrada. */
+  newAccounts: string[];
   totalRows: number;
   validRows: number;
   invalidRows: number;

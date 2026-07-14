@@ -1,0 +1,60 @@
+/**
+ * Resolucao de centro de custo por nome, compartilhada entre o parser da
+ * planilha e a confirmacao do lote. As duas pontas precisam decidir igual: se
+ * a previa diz que a conta e nova, a importacao tem que criar essa mesma conta.
+ */
+
+export type WorkMatcher = {
+  id: string;
+  name: string;
+  slug: string;
+  costCenterAliases: string;
+};
+
+/** Compara ignorando acentos, caixa e pontuacao: "Ediser" = "EDISER" = "ediser". */
+export function normalizeName(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function parseAliases(raw: string) {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Nome, slug e apelidos pelos quais a conta pode aparecer na planilha. */
+export function workAliases(work: WorkMatcher) {
+  return [work.name, work.slug, ...parseAliases(work.costCenterAliases)].map(normalizeName);
+}
+
+export function matchWork(costCenter: string, works: WorkMatcher[]) {
+  const value = normalizeName(costCenter);
+  if (!value) return undefined;
+  return works.find((work) => workAliases(work).includes(value));
+}
+
+/** Slug a partir do nome: "Despesa Pessoal Jeronimo" -> "despesa-pessoal-jeronimo". */
+export function slugifyName(value: string) {
+  return normalizeName(value).replace(/\s+/g, "-").slice(0, 60) || "conta";
+}
+
+/**
+ * Garante um slug livre. Colisao acontece quando dois nomes normalizam igual
+ * (ex.: "Obra A" e "obra-a"), entao o sufixo evita quebrar a unicidade.
+ */
+export function uniqueSlug(name: string, taken: Set<string>) {
+  const base = slugifyName(name);
+  if (!taken.has(base)) return base;
+
+  let suffix = 2;
+  while (taken.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
+}

@@ -1,19 +1,17 @@
 import crypto from "node:crypto";
 import { parse as parseCsv } from "csv-parse/sync";
 import ExcelJS from "exceljs";
+import {
+  matchWork,
+  normalizeName as normalize,
+  type WorkMatcher,
+} from "@/lib/cost-center";
 import type {
   ImportContributionRow,
   ImportPreview,
   ImportSummaryCheck,
   PaymentImportRow,
 } from "@/types";
-
-type WorkMatcher = {
-  id: string;
-  name: string;
-  slug: string;
-  costCenterAliases: string;
-};
 
 type RawRow = Record<string, unknown>;
 
@@ -39,15 +37,6 @@ const optionalColumns = {
 const summaryHeaderLabels = ["conta", "valor", "status"];
 const contributionSectionLabels = ["aportes", "aporte"];
 const totalLabels = ["total", "subtotal", "total geral", "soma"];
-
-function normalize(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, " ")
-    .trim()
-    .toLowerCase();
-}
 
 function findColumn(headers: string[], aliases: string[]) {
   const normalizedAliases = aliases.map(normalize);
@@ -124,24 +113,6 @@ function buildUniqueKey(input: {
       ].join("|"),
     )
     .digest("hex");
-}
-
-function aliasesForWork(work: WorkMatcher) {
-  let aliases: string[] = [];
-
-  try {
-    aliases = JSON.parse(work.costCenterAliases);
-  } catch {
-    aliases = [];
-  }
-
-  return [work.name, work.slug, ...aliases].map(normalize);
-}
-
-function resolveWork(costCenter: string, works: WorkMatcher[]) {
-  const value = normalize(costCenter);
-  if (!value) return undefined;
-  return works.find((work) => aliasesForWork(work).includes(value));
 }
 
 function detectDelimiter(text: string) {
@@ -317,14 +288,15 @@ function parseTrailingBlocks(trailing: SheetGrid["trailing"], works: WorkMatcher
       continue;
     }
 
-    const work = resolveWork(label, works);
+    const work = matchWork(label, works);
     contributions.push({
       rowNumber,
       accountLabel: label,
       amount,
       workId: work?.id,
-      workName: work?.name,
-      errors: work ? [] : ["Conta do aporte nao reconhecida"],
+      workName: work?.name ?? label,
+      isNewWork: !work,
+      errors: [],
     });
   }
 
@@ -341,42 +313,52 @@ function buildSummaryChecks(
   sheetSummary: Array<{ accountLabel: string; amount: number; status?: string }>,
   works: WorkMatcher[],
 ): ImportSummaryCheck[] {
+  /**
+   * Conta ja cadastrada agrupa pelo id; conta nova ainda nao tem id, entao
+   * agrupa pelo nome normalizado. Sem isso, as contas novas ficariam de fora
+   * do confronto e o total da planilha pareceria divergir de tudo.
+   */
+  const keyForWork = (workId: string | undefined, costCenter: string) =>
+    workId ?? `nome:${normalize(costCenter)}`;
+
   const computed = new Map<string, number>();
+  const labels = new Map<string, string>();
 
   for (const row of rows) {
     if (row.errors.length > 0) continue;
-    const work = row.workId;
-    if (!work) continue;
-    computed.set(work, (computed.get(work) ?? 0) + row.amount);
+    if (!row.costCenter) continue;
+    const key = keyForWork(row.workId, row.costCenter);
+    computed.set(key, (computed.get(key) ?? 0) + row.amount);
+    labels.set(key, row.workName ?? row.costCenter);
   }
 
   const checks: ImportSummaryCheck[] = [];
-  const seenWorks = new Set<string>();
+  const seen = new Set<string>();
 
   for (const entry of sheetSummary) {
-    const work = resolveWork(entry.accountLabel, works);
-    const computedAmount = work ? (computed.get(work.id) ?? 0) : 0;
-    if (work) seenWorks.add(work.id);
+    const work = matchWork(entry.accountLabel, works);
+    const key = keyForWork(work?.id, entry.accountLabel);
+    const computedAmount = computed.get(key) ?? 0;
+    seen.add(key);
 
     checks.push({
       accountLabel: entry.accountLabel,
-      workName: work?.name,
+      workName: work?.name ?? labels.get(key),
       sheetAmount: entry.amount,
-      computedAmount,
+      computedAmount: Number(computedAmount.toFixed(2)),
       difference: Number((computedAmount - entry.amount).toFixed(2)),
       status: entry.status,
     });
   }
 
   // Contas que tem pagamentos mas nao aparecem no resumo da planilha.
-  for (const [workId, amount] of computed) {
-    if (seenWorks.has(workId)) continue;
-    const work = works.find((item) => item.id === workId);
+  for (const [key, amount] of computed) {
+    if (seen.has(key)) continue;
     checks.push({
-      accountLabel: work?.name ?? workId,
-      workName: work?.name,
+      accountLabel: labels.get(key) ?? key,
+      workName: labels.get(key),
       sheetAmount: null,
-      computedAmount: amount,
+      computedAmount: Number(amount.toFixed(2)),
       difference: null,
     });
   }
@@ -439,14 +421,15 @@ export async function parsePaymentFile(
     const category = String(raw[columns.category ?? ""] ?? "").trim();
     const amount = parseMoney(raw[columns.amount ?? ""]);
     const dueDate = parseDate(raw[columns.dueDate ?? ""]);
-    const work = resolveWork(costCenter, works);
+    const work = matchWork(costCenter, works);
 
     if (!supplierName) errors.push("Fornecedor obrigatorio");
     if (!description) errors.push("Descricao obrigatoria");
     if (Number.isNaN(amount) || amount <= 0) errors.push("Valor invalido");
     if (!dueDate) errors.push("Data invalida");
+    // Centro de custo desconhecido nao e erro: a conta e criada pelo nome na
+    // confirmacao. So a ausencia do nome invalida a linha.
     if (!costCenter) errors.push("Centro de custo obrigatorio");
-    else if (!work) errors.push(`Centro de custo nao reconhecido: ${costCenter}`);
 
     const currentDueDate = dueDate ? isoDate(dueDate) : "";
     const key =
@@ -470,7 +453,9 @@ export async function parsePaymentFile(
       currentDueDate,
       costCenter,
       workId: work?.id,
-      workName: work?.name,
+      // Sem conta correspondente, o proprio nome da planilha vira a conta.
+      workName: work?.name ?? costCenter,
+      isNewWork: Boolean(costCenter) && !work,
       uniqueKey: key,
       errors,
       duplicate,
@@ -481,9 +466,28 @@ export async function parsePaymentFile(
   const summaryChecks = buildSummaryChecks(rows, sheetSummary, works);
   const validRows = rows.filter((row) => row.errors.length === 0);
 
+  /**
+   * Nomes de conta que ainda nao existem, deduplicados por nome normalizado.
+   * Vence a primeira grafia encontrada, que e a mesma regra da confirmacao
+   * (quem cria a conta e a primeira linha daquele centro de custo). Assim a
+   * previa promete o mesmo nome que sera criado de fato.
+   */
+  const newAccounts: string[] = [];
+  const seenAccounts = new Set<string>();
+
+  for (const row of [...validRows, ...contributions]) {
+    if (!row.isNewWork) continue;
+    const label = "costCenter" in row ? row.costCenter : row.accountLabel;
+    const key = normalize(label);
+    if (!key || seenAccounts.has(key)) continue;
+    seenAccounts.add(key);
+    newAccounts.push(label);
+  }
+
   return {
     fileName,
     missingColumns,
+    newAccounts,
     totalRows: rows.length,
     validRows: validRows.length,
     invalidRows: rows.filter((row) => row.errors.length > 0).length,

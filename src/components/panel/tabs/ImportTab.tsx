@@ -10,6 +10,7 @@ type ConfirmResponse = {
   importedRows?: number;
   skippedRows?: number;
   importedContributions?: number;
+  createdAccounts?: string[];
   error?: string;
 };
 
@@ -91,6 +92,9 @@ export function ImportTab() {
       const parts = [`${data.importedRows ?? 0} pagamento(s) importado(s)`];
       if (data.importedContributions) parts.push(`${data.importedContributions} aporte(s)`);
       if (data.skippedRows) parts.push(`${data.skippedRows} já existia(m) e foi(ram) ignorado(s)`);
+      if (data.createdAccounts?.length) {
+        parts.push(`contas criadas: ${data.createdAccounts.join(", ")}`);
+      }
 
       setPreview(null);
       setFile(null);
@@ -155,6 +159,16 @@ export function ImportTab() {
       {preview?.missingColumns.length ? (
         <div className="alert error">
           Colunas obrigatórias não encontradas: {preview.missingColumns.join(", ")}.
+        </div>
+      ) : null}
+
+      {preview?.newAccounts.length ? (
+        <div className="alert">
+          <strong>
+            {preview.newAccounts.length} centro(s) de custo novo(s) — a conta será criada na
+            importação:
+          </strong>{" "}
+          {preview.newAccounts.join(", ")}.
         </div>
       ) : null}
 
@@ -229,10 +243,12 @@ export function ImportTab() {
                           <td>{row.accountLabel}</td>
                           <td>{row.workName ?? "-"}</td>
                           <td>
-                            {row.errors.length === 0 ? (
-                              <span className="status APROVADO">Será importado</span>
-                            ) : (
+                            {row.errors.length > 0 ? (
                               <span className="status REPROVADO">{row.errors.join("; ")}</span>
+                            ) : row.isNewWork ? (
+                              <span className="status TRANSFERIDO">Conta nova</span>
+                            ) : (
+                              <span className="status APROVADO">Será importado</span>
                             )}
                           </td>
                           <td className="amount">
@@ -285,7 +301,15 @@ export function ImportTab() {
                         <td>
                           <small className="muted">{row.category || "-"}</small>
                         </td>
-                        <td>{row.workName ?? row.costCenter ?? "-"}</td>
+                        <td>
+                          {row.workName ?? row.costCenter ?? "-"}
+                          {row.isNewWork ? (
+                            <>
+                              <br />
+                              <small style={{ color: "var(--info)" }}>conta nova</small>
+                            </>
+                          ) : null}
+                        </td>
                         <td>{row.currentDueDate ? shortDate(row.currentDueDate) : "-"}</td>
                         <td>
                           {row.errors.length === 0 ? (

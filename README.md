@@ -106,9 +106,21 @@ Aceita `.xlsx` e `.csv`. As colunas são reconhecidas por nome, com aliases:
 A comparação ignora acentos, caixa e pontuação. Valores aceitam `1.234,56` e
 `1234.56`; datas aceitam `dd/mm/aaaa` e o serial do Excel.
 
-O centro de custo de cada linha é resolvido contra as contas cadastradas pelos
-seus apelidos (`costCenterAliases`), então a mesma conta pode aparecer escrita
-de várias formas na planilha.
+### Centros de custo
+
+O centro de custo é reconhecido **pelo nome**, e não existe lista fixa: qualquer
+nome é aceito. A conta é procurada entre as cadastradas — pelo nome, pelo slug
+ou pelos apelidos (`costCenterAliases`) — e, se não existir, é **criada na
+importação** com o nome que veio na planilha. A prévia mostra quais contas serão
+criadas antes de você confirmar.
+
+A comparação é normalizada, então `Reisolamento`, `REISOLAMENTO` e
+`reisolamento` caem na mesma conta, sem duplicar. Os apelidos servem para os
+casos em que o nome na planilha não é o nome da conta — por exemplo,
+`Despesa Pessoal Jeronimo` resolve para a conta `JERONIMO`.
+
+O seed cria três contas (`EDISER`, `RECAP`, `JERONIMO`) apenas por conveniência,
+com os apelidos usados na planilha de referência. O sistema não depende delas.
 
 A leitura **para** ao encontrar o subtotal ou o cabeçalho do resumo, em vez de
 tratar essas linhas como pagamento. A prévia mostra linha a linha o que é válido,

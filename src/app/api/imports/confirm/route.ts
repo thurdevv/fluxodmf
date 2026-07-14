@@ -3,8 +3,11 @@ import { ActionType, PaymentStatus } from "@prisma-generated/enums";
 import { auditLog } from "@/lib/audit";
 import { ApiError, handleApiError, ok } from "@/lib/api";
 import { requireTab } from "@/lib/auth";
+import { matchWork, normalizeName, uniqueSlug } from "@/lib/cost-center";
 import { prisma } from "@/lib/db";
 
+// workId e opcional: a conta pode nao existir ainda e ser criada aqui. Quem
+// decide qual conta vale e o servidor, a partir do nome do centro de custo.
 const rowSchema = z.object({
   externalReference: z.string().optional(),
   supplierName: z.string().min(1),
@@ -14,7 +17,7 @@ const rowSchema = z.object({
   originalDueDate: z.string().min(1),
   currentDueDate: z.string().min(1),
   costCenter: z.string().min(1),
-  workId: z.string().min(1),
+  workId: z.string().optional(),
   uniqueKey: z.string().min(1),
   errors: z.array(z.string()),
   duplicate: z.boolean(),
@@ -23,7 +26,7 @@ const rowSchema = z.object({
 const contributionSchema = z.object({
   accountLabel: z.string().min(1),
   amount: z.number().positive(),
-  workId: z.string().min(1),
+  workId: z.string().optional(),
   errors: z.array(z.string()),
 });
 
@@ -65,6 +68,45 @@ export async function POST(request: Request) {
     }
 
     const batch = await prisma.$transaction(async (tx) => {
+      /**
+       * Resolve o centro de custo pelo nome e cria a conta se ela ainda nao
+       * existir. O `workId` que o cliente mandou e so uma dica da previa: quem
+       * decide e o servidor, e entre a previa e a confirmacao a conta pode ter
+       * sido criada por outra importacao.
+       */
+      const existingWorks = await tx.work.findMany();
+      const takenSlugs = new Set(existingWorks.map((work) => work.slug));
+      const resolved = new Map<string, string>();
+      const createdAccounts: string[] = [];
+
+      async function resolveWorkId(costCenter: string) {
+        const key = normalizeName(costCenter);
+        const cached = resolved.get(key);
+        if (cached) return cached;
+
+        const match = matchWork(costCenter, existingWorks);
+        if (match) {
+          resolved.set(key, match.id);
+          return match.id;
+        }
+
+        const slug = uniqueSlug(costCenter, takenSlugs);
+        takenSlugs.add(slug);
+
+        const created = await tx.work.create({
+          data: {
+            name: costCenter.trim(),
+            slug,
+            costCenterAliases: JSON.stringify([costCenter.trim()]),
+          },
+        });
+
+        existingWorks.push(created);
+        resolved.set(key, created.id);
+        createdAccounts.push(created.name);
+        return created.id;
+      }
+
       const importBatch = await tx.importBatch.create({
         data: {
           fileName: body.fileName,
@@ -87,7 +129,7 @@ export async function POST(request: Request) {
             currentDueDate: dateFromIsoDay(row.currentDueDate),
             costCenter: row.costCenter,
             uniqueKey: row.uniqueKey,
-            workId: row.workId,
+            workId: await resolveWorkId(row.costCenter),
             importBatchId: importBatch.id,
             createdById: user.id,
             status: PaymentStatus.PENDENTE,
@@ -110,37 +152,41 @@ export async function POST(request: Request) {
           data: {
             accountLabel: contribution.accountLabel,
             amount: contribution.amount,
-            workId: contribution.workId,
+            workId: await resolveWorkId(contribution.accountLabel),
             importBatchId: importBatch.id,
           },
         });
       }
 
-      return importBatch;
+      return { importBatch, createdAccounts };
     });
+
+    const { importBatch, createdAccounts } = batch;
 
     await auditLog({
       actorId: user.id,
       event: "IMPORT_CONFIRM",
       entity: "ImportBatch",
-      entityId: batch.id,
+      entityId: importBatch.id,
       metadata: {
-        fileName: batch.fileName,
+        fileName: importBatch.fileName,
         importedRows: rowsToImport.length,
         skippedRows: validRows.length - rowsToImport.length,
         contributions: validContributions.length,
         totalAmount: Number(
           rowsToImport.reduce((sum, row) => sum + row.amount, 0).toFixed(2),
         ),
+        ...(createdAccounts.length ? { contasCriadas: createdAccounts } : {}),
       },
     });
 
     return ok(
       {
-        batchId: batch.id,
+        batchId: importBatch.id,
         importedRows: rowsToImport.length,
         skippedRows: validRows.length - rowsToImport.length,
         importedContributions: validContributions.length,
+        createdAccounts,
       },
       201,
     );
