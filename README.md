@@ -1,0 +1,172 @@
+# DJ Fluxo
+
+Painel de aprovação do fluxo de pagamentos. Importa a planilha de pagamentos do
+dia, valida e classifica cada lançamento, e conduz a sessão de aprovação com
+controle de acesso por perfil e registro de auditoria de tudo que é alterado.
+
+## O modelo
+
+A planilha de fluxo tem três blocos, e o sistema trata cada um de um jeito:
+
+| Bloco | O que é | O que o sistema faz |
+| --- | --- | --- |
+| Linhas de pagamento | Fornecedor, data, descrição, valor, categoria e centro de custo | Importa como pagamentos pendentes |
+| Resumo por conta | Total por conta, escrito na planilha | **Recalcula** a partir das linhas e avisa se divergir |
+| Aportes | Valor que entra em cada conta para cobrir o dia | Importa, pois não é derivável das linhas |
+
+O resumo é recalculado de propósito: ele é a soma das linhas agrupadas por
+centro de custo, então é derivável — e planilhas mantidas à mão ficam
+desatualizadas quando uma linha é incluída depois do total ser fechado. Quando o
+valor escrito não bate com a soma real, a prévia mostra a diferença e o sistema
+segue com a soma das linhas.
+
+Os aportes, ao contrário, são informação nova, e sustentam a métrica central do
+painel: **cobertura**, isto é, se o aporte de cada conta cobre o que ainda está
+comprometido.
+
+## Como rodar
+
+Requer Node 20+ (desenvolvido no 24) e npm.
+
+```bash
+npm install
+cp .env.example .env        # ajuste AUTH_SECRET
+npm run prisma:generate     # gera o client do Prisma
+npm run db:init             # cria as tabelas do SQLite
+npm run db:seed             # cria o usuário inicial e as contas
+npm run dev
+```
+
+Acesse `http://localhost:3000` e entre com:
+
+```
+usuário: jfx
+senha:   jfx
+```
+
+Esse usuário nasce como **Coordenador**. Troque a senha antes de usar para
+valer, e gere um `AUTH_SECRET` longo e aleatório — é ele que assina a sessão.
+
+### Scripts
+
+| Comando | O que faz |
+| --- | --- |
+| `npm run dev` | Sobe em modo desenvolvimento |
+| `npm run build` / `npm start` | Build e execução em produção |
+| `npm run lint` | ESLint |
+| `npm run db:init` | Cria as tabelas se não existirem |
+| `npm run db:seed` | Cria/atualiza o usuário inicial e as contas |
+| `npm run db:reset` | **Apaga** o banco e recria do zero |
+
+## Perfis e acesso
+
+O acesso é por perfil, e cada aba do painel só existe para quem pode vê-la:
+
+| | Dashboard | Importação | Pagamentos | Usuários | Permissões | Logs |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| **Funcionário** | ✓ | ✓ | | | | |
+| **Gestor** | ✓ | ✓ | ✓ | | | |
+| **Coordenador** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+Gestor edita pagamentos e gerencia o fluxo. Coordenador tem acesso total,
+incluindo as ações críticas (cancelar e reabrir pagamento, gerenciar usuários e
+permissões).
+
+Esconder a aba **não** é a proteção: cada rota de API revalida o perfil no
+servidor, e perfil e status são lidos do banco a cada requisição, nunca do
+token — rebaixar ou desativar alguém tem efeito imediato, sem esperar a sessão
+expirar. As regras ficam todas em `src/lib/permissions.ts`, que é a fonte única
+consultada tanto pelo menu quanto pelas rotas.
+
+### Entrada de usuários
+
+A tela de login tem **Solicitar acesso**. A conta nasce `PENDENTE` como
+funcionário (menor privilégio) e não entra até um coordenador aprovar e definir
+o perfil. O coordenador também pode criar contas direto, já ativas.
+
+O sistema impede que o último coordenador ativo se rebaixe, se desative ou seja
+excluído — sem isso, dá para ficar sem ninguém capaz de gerenciar o acesso.
+Usuário com histórico (importações, pagamentos, ações) é desativado em vez de
+excluído, para não quebrar a auditoria.
+
+## Importação
+
+Aceita `.xlsx` e `.csv`. As colunas são reconhecidas por nome, com aliases:
+
+| Campo | Nomes aceitos |
+| --- | --- |
+| Fornecedor | `fornecedor`, `cliente fornecedor`, `nome fornecedor`, `supplier` |
+| Data | `data`, `vencimento`, `data vencimento`, `data de vencimento`, `due date` |
+| Descrição | `descricao`, `historico`, `observacao` |
+| Valor | `valor`, `valor liquido`, `amount`, `total` |
+| Centro de custo | `centro de custo`, `centro custo`, `obra`, `conta`, `cost center` |
+| Categoria *(opcional)* | `categoria`, `category`, `plano de contas` |
+| Referência *(opcional)* | `referencia`, `documento`, `numero`, `id` |
+
+A comparação ignora acentos, caixa e pontuação. Valores aceitam `1.234,56` e
+`1234.56`; datas aceitam `dd/mm/aaaa` e o serial do Excel.
+
+O centro de custo de cada linha é resolvido contra as contas cadastradas pelos
+seus apelidos (`costCenterAliases`), então a mesma conta pode aparecer escrita
+de várias formas na planilha.
+
+A leitura **para** ao encontrar o subtotal ou o cabeçalho do resumo, em vez de
+tratar essas linhas como pagamento. A prévia mostra linha a linha o que é válido,
+inválido ou duplicado, e só o que está válido é importado.
+
+Cada lançamento tem uma chave única derivada de fornecedor, descrição, valor,
+data e centro de custo. Isso torna a importação **idempotente**: reenviar a mesma
+planilha não duplica nada, e a planilha do dia seguinte só traz o que é novo.
+
+## O fluxo do dia
+
+Um pagamento importado nasce `PENDENTE`. Durante a sessão de aprovação ele pode
+ser aprovado, reprovado, ter a data alterada, ou entrar em pedido de informação.
+As ações valem individualmente ou **em lote**: clicar nos pagamentos marca vários
+e o botão *Ações em lote* aplica aprovar, reprovar ou alterar data a todos, com
+um motivo único.
+
+Duas noções diferentes convivem, e vale não confundi-las:
+
+- **Em aberto** (o que aparece no fluxo) é o que ainda espera decisão. Ao ser
+  pago, reprovado ou remarcado, o lançamento sai da lista. Quando a sessão
+  termina, o fluxo fica vazio.
+- **Comprometido** (o que pesa na cobertura do aporte) inclui os aprovados —
+  aprovar não devolve dinheiro ao caixa. Só reprovar, cancelar ou remarcar para
+  outro dia liberam o valor.
+
+Toda ação é registrada com autor, o que mudou (de → para) e quando, visível na
+aba **Logs**.
+
+## Estrutura
+
+```
+src/
+  app/
+    api/            rotas (auth, imports, payments, dashboard, admin)
+    painel/         a SPA: rota única, abas por estado
+    login/
+  components/
+    panel/          shell, contexto e as abas
+  lib/
+    permissions.ts  fonte única do RBAC
+    import-parser.ts  leitura e validação da planilha
+    auth.ts         sessão, hash e guardas de perfil
+prisma/
+  schema.prisma
+  seed.ts
+scripts/
+  init-db.ts        cria as tabelas
+  reset-db.ts       apaga e recria o banco
+```
+
+Stack: Next 16 (App Router), React 19, TypeScript, Prisma 7 com SQLite
+(`better-sqlite3`), Zod para validação, `jose` para a sessão JWT, `bcryptjs`
+para as senhas, ExcelJS e `csv-parse` para a importação.
+
+## Dados e privacidade
+
+O `.gitignore` mantém fora do versionamento o `.env`, o banco (`prisma/dev.db`) e
+as planilhas (`*.xlsx`, `*.xls`) — elas contêm nomes de fornecedores e
+funcionários e valores reais. Use `samples/conta-azul-exemplo.csv` como
+referência de formato.
