@@ -1,0 +1,214 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  FUNCIONARIO
+  GESTOR
+  COORDENADOR
+}
+
+enum UserStatus {
+  PENDENTE
+  ATIVO
+  RECUSADO
+  INATIVO
+}
+
+enum PaymentStatus {
+  PENDENTE
+  APROVADO
+  REPROVADO
+  TRANSFERIDO
+  INFO_SOLICITADA
+  CORRIGIDO
+  CANCELADO
+}
+
+enum ImportStatus {
+  CONFIRMADO
+  FALHOU
+}
+
+enum ActionType {
+  IMPORTAR
+  APROVAR
+  REPROVAR
+  TRANSFERIR
+  SOLICITAR_INFO
+  RESPONDER_INFO
+  CANCELAR
+  REABRIR
+}
+
+enum NotificationStatus {
+  SIMULADO
+  ENVIADO
+  FALHOU
+}
+
+model User {
+  id            String            @id @default(cuid())
+  name          String
+  username      String            @unique
+  email         String            @unique
+  passwordHash  String
+  role          Role              @default(FUNCIONARIO)
+  status        UserStatus        @default(PENDENTE)
+  phone         String?
+  reviewedById  String?
+  reviewedBy    User?             @relation("UserReviewer", fields: [reviewedById], references: [id])
+  reviewed      User[]            @relation("UserReviewer")
+  reviewedAt    DateTime?
+  works         UserWork[]
+  imports       ImportBatch[]     @relation("ImportedBy")
+  payments      Payment[]         @relation("PaymentCreatedBy")
+  actions       PaymentAction[]
+  notifications NotificationLog[]
+  auditLogs     AuditLog[]        @relation("AuditActor")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status])
+}
+
+model Work {
+  id                String         @id @default(cuid())
+  name              String
+  slug              String         @unique
+  costCenterAliases String         @default("[]")
+  active            Boolean        @default(true)
+  users             UserWork[]
+  payments          Payment[]
+  contributions     Contribution[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+model UserWork {
+  userId String
+  workId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  work   Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@id([userId, workId])
+}
+
+model ImportBatch {
+  id            String         @id @default(cuid())
+  fileName      String
+  totalRows     Int
+  validRows     Int
+  invalidRows   Int
+  status        ImportStatus   @default(CONFIRMADO)
+  importedById  String
+  importedBy    User           @relation("ImportedBy", fields: [importedById], references: [id])
+  payments      Payment[]
+  contributions Contribution[]
+  createdAt     DateTime       @default(now())
+}
+
+/// Aportes por conta (bloco APORTES da planilha). Valor que entra na conta
+/// para cobrir os pagamentos do periodo; nao e derivavel das linhas de pagamento.
+model Contribution {
+  id            String      @id @default(cuid())
+  accountLabel  String
+  amount        Decimal
+  workId        String
+  work          Work        @relation(fields: [workId], references: [id])
+  importBatchId String
+  importBatch   ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@index([workId])
+}
+
+model Payment {
+  id                String          @id @default(cuid())
+  externalReference String?
+  supplierName      String
+  description       String
+  amount            Decimal
+  originalDueDate   DateTime
+  currentDueDate    DateTime
+  costCenter        String
+  category          String          @default("")
+  uniqueKey         String          @unique
+  status            PaymentStatus   @default(PENDENTE)
+  workId            String
+  work              Work            @relation(fields: [workId], references: [id])
+  importBatchId     String
+  importBatch       ImportBatch     @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  createdById       String
+  createdBy         User            @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+  actions           PaymentAction[]
+  attachments       Attachment[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([status])
+  @@index([workId])
+  @@index([currentDueDate])
+}
+
+model PaymentAction {
+  id             String         @id @default(cuid())
+  paymentId      String
+  payment        Payment        @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  actorId        String
+  actor          User           @relation(fields: [actorId], references: [id])
+  type           ActionType
+  previousStatus PaymentStatus?
+  newStatus      PaymentStatus
+  reason         String?
+  newDueDate     DateTime?
+  note           String?
+  createdAt      DateTime       @default(now())
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  paymentId  String
+  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  fileName   String
+  url        String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+}
+
+model NotificationLog {
+  id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  workIds      String             @default("[]")
+  paymentCount Int
+  channel      String             @default("whatsapp")
+  destination  String
+  message      String
+  link         String
+  status       NotificationStatus @default(SIMULADO)
+  providerId   String?
+  errorMessage String?
+  createdAt    DateTime           @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id])
+  event     String
+  entity    String
+  entityId  String?
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+}

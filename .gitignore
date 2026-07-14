@@ -1,0 +1,33 @@
+node_modules
+# Keep environment variables out of version control
+.env
+.env.local
+.env.*.local
+
+/generated/prisma
+/generated
+/.next
+/out
+/coverage
+*.log
+*.tsbuildinfo
+next-env.d.ts
+prisma/dev.db
+prisma/dev.db-journal
+prisma/dev.db-shm
+prisma/dev.db-wal
+dev.db
+dev.db-journal
+dev.db-shm
+dev.db-wal
+
+# Planilhas de fluxo: contem dados reais de fornecedores e funcionarios
+# (nomes, valores, reembolsos). Nao versionar.
+*.xlsx
+*.xls
+
+# Sistema operacional / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

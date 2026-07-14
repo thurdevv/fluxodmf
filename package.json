@@ -1,0 +1,57 @@
+{
+  "name": "fluxo",
+  "version": "1.0.0",
+  "description": "Sistema de aprovacao de fluxo financeiro",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "prisma:generate": "prisma generate",
+    "db:init": "tsx scripts/init-db.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "tsx scripts/reset-db.ts"
+  },
+  "keywords": [
+    "financeiro",
+    "aprovacao",
+    "workflow"
+  ],
+  "author": "",
+  "license": "ISC",
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  },
+  "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.11.1",
+    "clsx": "^2.1.1",
+    "csv-parse": "^7.0.1",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.23.0",
+    "next": "^16.2.10",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.10",
+    "prisma": "^7.8.0",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3"
+  }
+}
