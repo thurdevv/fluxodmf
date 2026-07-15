@@ -189,8 +189,6 @@ export async function PATCH(request: Request) {
       data: {
         name: body.name?.trim(),
         email: body.email?.trim().toLowerCase(),
-        // Campo vazio limpa o telefone. Sem o null explicito viraria a string
-        // vazia, que passa por "tem telefone" e quebra a notificacao.
         phone: body.phone === undefined ? undefined : body.phone.trim() || null,
         role: body.role,
         status: body.status,
@@ -273,13 +271,14 @@ export async function DELETE(request: Request) {
 
     // Quem ja importou ou agiu sobre pagamentos nao pode sumir sem quebrar o
     // historico; nesse caso a conta e desativada em vez de removida.
-    const [payments, actions, imports] = await Promise.all([
+    const [payments, actions, imports, flowEvents] = await Promise.all([
       prisma.payment.count({ where: { createdById: target.id } }),
       prisma.paymentAction.count({ where: { actorId: target.id } }),
       prisma.importBatch.count({ where: { importedById: target.id } }),
+      prisma.dailyFlowEvent.count({ where: { actorId: target.id } }),
     ]);
 
-    if (payments + actions + imports > 0) {
+    if (payments + actions + imports + flowEvents > 0) {
       const user = await prisma.user.update({
         where: { id: target.id },
         data: { status: UserStatus.INATIVO, reviewedById: actor.id, reviewedAt: new Date() },
@@ -293,7 +292,7 @@ export async function DELETE(request: Request) {
         entityId: target.id,
         metadata: {
           username: target.username,
-          motivo: "Possui histórico vinculado (pagamentos, ações ou importações)",
+          motivo: "Possui histórico vinculado (pagamentos, ações, importações ou fluxos)",
         },
       });
 

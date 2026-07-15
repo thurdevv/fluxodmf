@@ -301,25 +301,6 @@ export function DashboardTab() {
         </div>
       </section>
 
-      <section className="section">
-        <div className="section-header">
-          <h2>Por status</h2>
-        </div>
-        <div className="stats-grid">
-          {data.statusCards
-            .filter((card) => card.count > 0)
-            .map((card) => (
-              <div className="stat" key={card.status}>
-                <span>{statusLabels[card.status]}</span>
-                <strong>{card.count}</strong>
-                <small>{money(card.amount)}</small>
-              </div>
-            ))}
-          {data.statusCards.every((card) => card.count === 0) ? (
-            <p className="muted">Nenhum pagamento importado ainda.</p>
-          ) : null}
-        </div>
-      </section>
     </>
   );
 }

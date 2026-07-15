@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Scale } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, FileSpreadsheet, Scale } from "lucide-react";
 import { ChangeEvent, useRef, useState } from "react";
 import { Money } from "@/components/Money";
 import { money, shortDate } from "@/lib/format";
@@ -21,6 +21,7 @@ export function ReconciliationTab() {
   const [fromDate, setFromDate] = useState("");
   const [result, setResult] = useState<ReconciliationResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
 
   const internalRef = useRef<HTMLInputElement>(null);
@@ -79,6 +80,44 @@ export function ReconciliationTab() {
       setError("Falha de conexão ao enviar os extratos.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function exportMissingNotes() {
+    if (!result || result.pending.length === 0) return;
+    setExporting(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/reconciliation/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          collaborators: result.collaborators,
+          rows: result.pending,
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error ?? "Não foi possível gerar o PDF das notas faltantes.");
+        return;
+      }
+
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1];
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = encodedName
+        ? decodeURIComponent(encodedName)
+        : "Auditoria - notas faltantes.pdf";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Falha de conexão ao gerar o PDF das notas faltantes.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -233,6 +272,15 @@ export function ReconciliationTab() {
           <section className="section">
             <div className="section-header">
               <h2>Notas pendentes ({result.totals.pending})</h2>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => void exportMissingNotes()}
+                disabled={result.pending.length === 0 || exporting}
+              >
+                <FileDown size={16} />
+                {exporting ? "Gerando PDF..." : "Exportar Notas Faltantes"}
+              </button>
             </div>
 
             {result.totals.pending === 0 ? (

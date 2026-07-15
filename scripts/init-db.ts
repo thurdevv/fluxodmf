@@ -106,6 +106,46 @@ CREATE TABLE IF NOT EXISTS "Contribution" (
 
 CREATE INDEX IF NOT EXISTS "Contribution_workId_idx" ON "Contribution"("workId");
 
+CREATE TABLE IF NOT EXISTS "DailyFlow" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "importBatchId" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'RASCUNHO',
+  "startedById" TEXT,
+  "startedAt" DATETIME,
+  "closedById" TEXT,
+  "closedAt" DATETIME,
+  "finalSummary" TEXT NOT NULL DEFAULT '{}',
+  "createdAt" DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  "updatedAt" DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  CONSTRAINT "DailyFlow_importBatchId_fkey" FOREIGN KEY ("importBatchId") REFERENCES "ImportBatch"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "DailyFlow_startedById_fkey" FOREIGN KEY ("startedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT "DailyFlow_closedById_fkey" FOREIGN KEY ("closedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "DailyFlow_importBatchId_key" ON "DailyFlow"("importBatchId");
+CREATE INDEX IF NOT EXISTS "DailyFlow_status_idx" ON "DailyFlow"("status");
+CREATE INDEX IF NOT EXISTS "DailyFlow_createdAt_idx" ON "DailyFlow"("createdAt");
+
+CREATE TABLE IF NOT EXISTS "DailyFlowEvent" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "dailyFlowId" TEXT NOT NULL,
+  "actorId" TEXT NOT NULL,
+  "type" TEXT NOT NULL,
+  "reason" TEXT,
+  "metadata" TEXT NOT NULL DEFAULT '{}',
+  "createdAt" DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  CONSTRAINT "DailyFlowEvent_dailyFlowId_fkey" FOREIGN KEY ("dailyFlowId") REFERENCES "DailyFlow"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "DailyFlowEvent_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS "DailyFlowEvent_dailyFlowId_createdAt_idx" ON "DailyFlowEvent"("dailyFlowId", "createdAt");
+
+INSERT OR IGNORE INTO "DailyFlow" (
+  "id", "importBatchId", "status", "createdAt", "updatedAt"
+)
+SELECT 'legacy-' || "id", "id", 'RASCUNHO', "createdAt", "createdAt"
+FROM "ImportBatch";
+
 CREATE TABLE IF NOT EXISTS "PaymentAction" (
   "id" TEXT NOT NULL PRIMARY KEY,
   "paymentId" TEXT NOT NULL,
@@ -129,22 +169,6 @@ CREATE TABLE IF NOT EXISTS "Attachment" (
   "uploadedBy" TEXT NOT NULL,
   "createdAt" DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   CONSTRAINT "Attachment_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE CASCADE ON UPDATE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS "NotificationLog" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "userId" TEXT NOT NULL,
-  "workIds" TEXT NOT NULL DEFAULT '[]',
-  "paymentCount" INTEGER NOT NULL,
-  "channel" TEXT NOT NULL DEFAULT 'whatsapp',
-  "destination" TEXT NOT NULL,
-  "message" TEXT NOT NULL,
-  "link" TEXT NOT NULL,
-  "status" TEXT NOT NULL DEFAULT 'SIMULADO',
-  "providerId" TEXT,
-  "errorMessage" TEXT,
-  "createdAt" DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  CONSTRAINT "NotificationLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS "AuditLog" (

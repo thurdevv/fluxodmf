@@ -51,10 +51,17 @@ enum ActionType {
   REABRIR
 }
 
-enum NotificationStatus {
-  SIMULADO
-  ENVIADO
-  FALHOU
+enum DailyFlowStatus {
+  RASCUNHO
+  EM_APROVACAO
+  FECHADO
+}
+
+enum DailyFlowEventType {
+  CRIADO
+  ENVIADO_APROVACAO
+  FECHADO
+  REABERTO
 }
 
 model User {
@@ -74,8 +81,10 @@ model User {
   imports       ImportBatch[]     @relation("ImportedBy")
   payments      Payment[]         @relation("PaymentCreatedBy")
   actions       PaymentAction[]
-  notifications NotificationLog[]
   auditLogs     AuditLog[]        @relation("AuditActor")
+  flowsStarted  DailyFlow[]       @relation("DailyFlowStartedBy")
+  flowsClosed   DailyFlow[]       @relation("DailyFlowClosedBy")
+  flowEvents    DailyFlowEvent[]  @relation("DailyFlowEventActor")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -115,6 +124,7 @@ model ImportBatch {
   importedBy    User           @relation("ImportedBy", fields: [importedById], references: [id])
   payments      Payment[]
   contributions Contribution[]
+  dailyFlow     DailyFlow?
   createdAt     DateTime       @default(now())
 }
 
@@ -186,20 +196,38 @@ model Attachment {
   createdAt  DateTime @default(now())
 }
 
-model NotificationLog {
-  id           String             @id @default(cuid())
-  userId       String
-  user         User               @relation(fields: [userId], references: [id])
-  workIds      String             @default("[]")
-  paymentCount Int
-  channel      String             @default("whatsapp")
-  destination  String
-  message      String
-  link         String
-  status       NotificationStatus @default(SIMULADO)
-  providerId   String?
-  errorMessage String?
-  createdAt    DateTime           @default(now())
+model DailyFlow {
+  id              String          @id @default(cuid())
+  importBatchId   String          @unique
+  importBatch     ImportBatch     @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  status          DailyFlowStatus @default(RASCUNHO)
+  startedById     String?
+  startedBy       User?           @relation("DailyFlowStartedBy", fields: [startedById], references: [id])
+  startedAt       DateTime?
+  closedById      String?
+  closedBy        User?           @relation("DailyFlowClosedBy", fields: [closedById], references: [id])
+  closedAt        DateTime?
+  finalSummary    String          @default("{}")
+  events          DailyFlowEvent[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model DailyFlowEvent {
+  id          String             @id @default(cuid())
+  dailyFlowId String
+  dailyFlow   DailyFlow          @relation(fields: [dailyFlowId], references: [id], onDelete: Cascade)
+  actorId     String
+  actor       User               @relation("DailyFlowEventActor", fields: [actorId], references: [id])
+  type        DailyFlowEventType
+  reason      String?
+  metadata    String             @default("{}")
+  createdAt   DateTime           @default(now())
+
+  @@index([dailyFlowId, createdAt])
 }
 
 model AuditLog {

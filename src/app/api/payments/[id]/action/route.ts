@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ActionType, PaymentStatus } from "@prisma-generated/enums";
+import { ActionType, DailyFlowStatus, PaymentStatus } from "@prisma-generated/enums";
 import { auditLog } from "@/lib/audit";
 import { ApiError, handleApiError, ok } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
@@ -63,11 +63,18 @@ export async function POST(
 
     const payment = await prisma.payment.findUnique({
       where: { id },
-      include: { work: true },
+      include: { work: true, importBatch: { include: { dailyFlow: true } } },
     });
 
     if (!payment) {
       throw new ApiError(404, "Pagamento não encontrado.");
+    }
+
+    if (payment.importBatch.dailyFlow?.status === DailyFlowStatus.FECHADO) {
+      throw new ApiError(
+        409,
+        "Este fluxo diário está fechado. Um coordenador precisa reabri-lo antes de novas ações.",
+      );
     }
 
     if (payment.status === PaymentStatus.APROVADO && body.action !== "reopen") {

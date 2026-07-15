@@ -62,11 +62,11 @@ valer, e gere um `AUTH_SECRET` longo e aleatório — é ele que assina a sessã
 
 O acesso é por perfil, e cada aba do painel só existe para quem pode vê-la:
 
-| | Dashboard | Importação | Pagamentos | Usuários | Permissões | Logs |
-| --- | :-: | :-: | :-: | :-: | :-: | :-: |
-| **Funcionário** | ✓ | ✓ | | | | |
-| **Gestor** | ✓ | ✓ | ✓ | | | |
-| **Coordenador** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| | Dashboard | Importação | Conciliação | Pagamentos | Usuários | Permissões | Logs |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| **Funcionário** | ✓ | ✓ | | | | | |
+| **Gestor** | ✓ | ✓ | ✓ | ✓ | | | |
+| **Coordenador** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Gestor edita pagamentos e gerencia o fluxo. Coordenador tem acesso total,
 incluindo as ações críticas (cancelar e reabrir pagamento, gerenciar usuários e
@@ -92,6 +92,11 @@ excluído, para não quebrar a auditoria.
 ## Importação
 
 Aceita `.xlsx` e `.csv`. As colunas são reconhecidas por nome, com aliases:
+
+Antes de confirmar, o usuário pode dar um nome ao fluxo importado. Se deixar o
+campo vazio, o sistema usa `FLUXO DE PAGAMENTOS dd.MM`, considerando a data de
+processamento. Esse nome identifica a importação, o ciclo de aprovação e o
+relatório final.
 
 | Campo | Nomes aceitos |
 | --- | --- |
@@ -132,11 +137,21 @@ planilha não duplica nada, e a planilha do dia seguinte só traz o que é novo.
 
 ## O fluxo do dia
 
-Um pagamento importado nasce `PENDENTE`. Durante a sessão de aprovação ele pode
-ser aprovado, reprovado, ter a data alterada, ou entrar em pedido de informação.
-As ações valem individualmente ou **em lote**: clicar nos pagamentos marca vários
-e o botão *Ações em lote* aplica aprovar, reprovar ou alterar data a todos, com
-um motivo único.
+Cada importação cria um fluxo diário em `RASCUNHO`. Nesse estado os pagamentos
+podem ser conferidos e alterados. Ao escolher **Enviar para aprovação**, o fluxo
+vai para `EM_APROVAÇÃO`, onde as decisões continuam sendo acompanhadas. O
+fechamento só é permitido quando nenhum pagamento estiver sem decisão.
+
+Um pagamento importado nasce `PENDENTE`. Durante a aprovação ele pode ser
+aprovado, reprovado, ter a data alterada, ou entrar em pedido de informação. As
+ações valem individualmente ou **em lote**: clicar nos pagamentos marca vários e
+o botão *Ações em lote* aplica aprovar, reprovar ou alterar data a todos, com um
+motivo único.
+
+Ao fechar, o sistema grava quantidades e valores finais, bloqueia novas
+alterações e libera o relatório PDF consolidado, com os pagamentos e o histórico
+do fluxo. Apenas um **Coordenador** pode reabrir um fluxo fechado, informando
+obrigatoriamente o motivo; autor, data e horário ficam registrados.
 
 Duas noções diferentes convivem, e vale não confundi-las:
 
@@ -149,6 +164,13 @@ Duas noções diferentes convivem, e vale não confundi-las:
 
 Toda ação é registrada com autor, o que mudou (de → para) e quando, visível na
 aba **Logs**.
+
+## Conciliação e notas faltantes
+
+A conciliação cruza o extrato do cartão com os lançamentos internos. Quando
+existirem transações sem documento correspondente, o botão **Exportar Notas
+Faltantes** gera um PDF no mesmo formato tabular do relatório de auditoria, com
+colaborador, tipo, estabelecimento, valor, data e status da transação.
 
 ## Estrutura
 

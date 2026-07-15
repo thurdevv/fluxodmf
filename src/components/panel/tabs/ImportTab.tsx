@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Download,
   FileSpreadsheet,
-  Send,
   Upload,
   Wand2,
 } from "lucide-react";
@@ -16,19 +15,11 @@ import type { FlowConversion } from "@/lib/flow-converter";
 import type { ImportPreview } from "@/types";
 
 type ConfirmResponse = {
+  flowName?: string;
   importedRows?: number;
   skippedRows?: number;
   importedContributions?: number;
   createdAccounts?: string[];
-  error?: string;
-};
-
-type NotifyResponse = {
-  notified?: number;
-  sent?: number;
-  simulated?: number;
-  failed?: number;
-  provider?: string;
   error?: string;
 };
 
@@ -39,11 +30,8 @@ export function ImportTab() {
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [importName, setImportName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Notificacao aos gestores ao final da importacao.
-  const [notifyOnConfirm, setNotifyOnConfirm] = useState(true);
-  const [notifying, setNotifying] = useState(false);
 
   // Conversor do export bruto do Conta Azul.
   const [rawFile, setRawFile] = useState<File | null>(null);
@@ -183,62 +171,6 @@ export function ImportTab() {
     }
   }
 
-  /** Devolve o resultado em vez de exibir: o chamador decide se vira alerta de
-   *  sucesso ou de erro, e a importacao pode ter dado certo mesmo com o aviso
-   *  falhando. */
-  async function notifyManagers(): Promise<{ ok: boolean; message: string }> {
-    setNotifying(true);
-
-    try {
-      const response = await fetch("/api/notifications", { method: "POST" });
-      const data = (await response.json()) as NotifyResponse;
-
-      if (!response.ok) {
-        return {
-          ok: false,
-          message: `Não foi possível notificar os gestores: ${data.error ?? "erro desconhecido"}.`,
-        };
-      }
-
-      if (!data.notified) {
-        return { ok: true, message: "Nenhum gestor para notificar." };
-      }
-
-      // `notified` conta os registros criados, e um FALHOU tambem e um deles.
-      // Dizer "N notificados" incluindo as falhas mentiria sobre quem foi
-      // avisado de fato.
-      const reached = (data.sent ?? 0) + (data.simulated ?? 0);
-      const failed = data.failed ?? 0;
-
-      if (reached === 0) {
-        return {
-          ok: false,
-          message: `Nenhum gestor foi notificado: ${failed} sem telefone válido. Veja o motivo na aba Pagamentos.`,
-        };
-      }
-
-      const parts = [`${reached} gestor(es) notificado(s)`];
-      if (data.simulated) parts.push(`${data.simulated} em modo simulado`);
-      if (failed) parts.push(`${failed} sem telefone válido`);
-      return { ok: true, message: `${parts.join(", ")}.` };
-    } catch {
-      return { ok: false, message: "Falha de conexão ao notificar os gestores." };
-    } finally {
-      setNotifying(false);
-    }
-  }
-
-  async function notifyFromButton() {
-    const result = await notifyManagers();
-    if (result.ok) {
-      setError("");
-      setMessage(result.message);
-    } else {
-      setMessage("");
-      setError(result.message);
-    }
-  }
-
   async function confirmImport() {
     if (!preview) return;
 
@@ -252,6 +184,7 @@ export function ImportTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: preview.fileName,
+          importName,
           totalRows: preview.totalRows,
           rows: preview.rows,
           contributions: preview.contributions,
@@ -274,14 +207,10 @@ export function ImportTab() {
 
       setPreview(null);
       setFile(null);
+      setImportName("");
       if (fileInputRef.current) fileInputRef.current.value = "";
 
-      // O aviso so faz sentido depois que o lote entrou: e o fluxo importado
-      // que os gestores vao conferir. Falhar o aviso nao desfaz a importacao,
-      // entao o sucesso continua sendo reportado.
-      const notice = notifyOnConfirm ? await notifyManagers() : null;
-      setMessage(`${parts.join(", ")}.${notice?.ok ? ` ${notice.message}` : ""}`);
-      if (notice && !notice.ok) setError(notice.message);
+      setMessage(`${data.flowName ? `${data.flowName}: ` : ""}${parts.join(", ")}.`);
     } catch {
       setError("Falha de conexão ao confirmar o lote.");
     } finally {
@@ -302,6 +231,23 @@ export function ImportTab() {
           <span className="muted">
             Colunas: fornecedor, data, descrição, valor, categoria e centro de custo.
           </span>
+          <div className="field" style={{ width: "min(100%, 420px)" }}>
+            <label htmlFor="import-name">Nome do fluxo</label>
+            <input
+              className="input"
+              id="import-name"
+              value={importName}
+              onChange={(event) => setImportName(event.target.value)}
+              placeholder={`FLUXO DE PAGAMENTOS ${new Intl.DateTimeFormat("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+              })
+                .format(new Date())
+                .replace("/", ".")}`}
+              maxLength={120}
+            />
+            <small className="muted">Opcional. Em branco, o sistema usa o nome sugerido.</small>
+          </div>
           {file ? <span className="muted import-file-name">{file.name}</span> : null}
           <input
             ref={fileInputRef}
@@ -334,23 +280,6 @@ export function ImportTab() {
             ) : null}
           </div>
         </div>
-      </section>
-
-      <section className="toolbar">
-        <button
-          className="button ghost"
-          type="button"
-          onClick={() => void notifyFromButton()}
-          disabled={notifying || confirming}
-          title="Avisa por WhatsApp os gestores ativos que têm conta atribuída e telefone cadastrado"
-        >
-          <Send size={16} />
-          {notifying ? "Notificando..." : "Notificar gestores"}
-        </button>
-        <span className="muted">
-          Avisa os gestores ativos que há fluxo para conferir. O telefone de cada gestor é
-          definido pelo coordenador, na aba Usuários.
-        </span>
       </section>
 
       <section className="section">
@@ -619,15 +548,6 @@ export function ImportTab() {
             <div className="section-header">
               <h2>Prévia do lote</h2>
               <div className="button-row">
-                <label className="checkbox-line">
-                  <input
-                    type="checkbox"
-                    checked={notifyOnConfirm}
-                    onChange={(event) => setNotifyOnConfirm(event.target.checked)}
-                    disabled={confirming}
-                  />
-                  Notificar gestores
-                </label>
                 <button
                   className="button success"
                   type="button"

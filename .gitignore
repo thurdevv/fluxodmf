@@ -27,6 +27,7 @@ dev.db-wal
 *.xlsx
 *.xls
 *.csv
+*.pdf
 !samples/*.csv
 
 # Sistema operacional / editor

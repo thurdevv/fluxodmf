@@ -3,7 +3,10 @@
 import {
   CalendarDays,
   CheckCircle2,
+  FileDown,
   ListChecks,
+  LockKeyhole,
+  Play,
   RefreshCw,
   RotateCcw,
   Search,
@@ -43,6 +46,53 @@ type Payment = {
 type PaymentsResponse = {
   payments: Payment[];
   summary: { total: number; approved: number; alteredDate: number; rejected: number };
+};
+
+type DailyFlowStatus = "RASCUNHO" | "EM_APROVACAO" | "FECHADO";
+
+type FlowSummary = {
+  total: { count: number; amount: number };
+  approved: { count: number; amount: number };
+  rejected: { count: number; amount: number };
+  transferred: { count: number; amount: number };
+  cancelled: { count: number; amount: number };
+  pending: { count: number; amount: number };
+  informationRequested: { count: number; amount: number };
+  corrected: { count: number; amount: number };
+  undecidedCount: number;
+};
+
+type DailyFlow = {
+  id: string;
+  status: DailyFlowStatus;
+  name: string;
+  startedAt: string | null;
+  closedAt: string | null;
+  startedBy: { id: string; name: string } | null;
+  closedBy: { id: string; name: string } | null;
+  createdAt: string;
+  summary: FlowSummary;
+  events: Array<{
+    id: string;
+    type: string;
+    reason: string | null;
+    actor: { id: string; name: string };
+    createdAt: string;
+  }>;
+};
+
+type DailyFlowsResponse = { flows: DailyFlow[] };
+
+const flowStatusLabels: Record<DailyFlowStatus, string> = {
+  RASCUNHO: "Rascunho",
+  EM_APROVACAO: "Em aprovação",
+  FECHADO: "Fechado",
+};
+
+const flowStatusClasses: Record<DailyFlowStatus, string> = {
+  RASCUNHO: "PENDENTE",
+  EM_APROVACAO: "TRANSFERIDO",
+  FECHADO: "APROVADO",
 };
 
 const statusOptions: { value: "" | StatusKey; label: string }[] = [
@@ -102,14 +152,30 @@ export function PaymentsTab() {
   const [batchReason, setBatchReason] = useState("");
   const [batchDueDate, setBatchDueDate] = useState("");
   const [batchProgress, setBatchProgress] = useState(0);
+  const [flowId, setFlowId] = useState("");
+  const [flowBusy, setFlowBusy] = useState(false);
+  const [flowReopenOpen, setFlowReopenOpen] = useState(false);
+  const [flowReason, setFlowReason] = useState("");
+
+  const {
+    data: flowData,
+    error: flowError,
+    loading: flowsLoading,
+    reload: reloadFlows,
+  } = useFetchData<DailyFlowsResponse>("/api/daily-flows");
+  const selectedFlow =
+    flowData?.flows.find((flow) => flow.id === flowId) ?? flowData?.flows[0] ?? null;
+  const effectiveFlowId = selectedFlow?.id ?? "";
+  const flowLocked = selectedFlow?.status === "FECHADO";
 
   const url = useMemo(() => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     if (workId) params.set("workId", workId);
     if (appliedSearch) params.set("search", appliedSearch);
+    if (effectiveFlowId) params.set("flowId", effectiveFlowId);
     return `/api/payments?${params.toString()}`;
-  }, [status, workId, appliedSearch]);
+  }, [status, workId, appliedSearch, effectiveFlowId]);
 
   const { data, error, loading, reload, setError } = useFetchData<PaymentsResponse>(url);
 
@@ -127,6 +193,43 @@ export function PaymentsTab() {
    */
   const batchPayments = payments.filter((payment) => batch.includes(payment.id));
   const batchTotal = batchPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+  async function changeFlow(action: "start_approval" | "close" | "reopen", reason?: string) {
+    if (!selectedFlow) return;
+    setFlowBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/daily-flows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flowId: selectedFlow.id, action, reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Não foi possível atualizar o fluxo diário.");
+        return;
+      }
+
+      setFlowReopenOpen(false);
+      setFlowReason("");
+      setBatch([]);
+      setMessage(
+        action === "start_approval"
+          ? "Fluxo enviado para aprovação."
+          : action === "close"
+            ? "Fluxo diário fechado."
+            : "Fluxo diário reaberto.",
+      );
+      reloadFlows();
+      reload();
+    } catch {
+      setError("Falha de conexão ao atualizar o fluxo diário.");
+    } finally {
+      setFlowBusy(false);
+    }
+  }
 
   function toggleBatch(id: string) {
     // Clicar marca/desmarca no lote e sempre leva os detalhes para o clicado.
@@ -255,6 +358,123 @@ export function PaymentsTab() {
 
   return (
     <>
+      {selectedFlow ? (
+        <section className="panel pad form-grid">
+          <div className="section-header">
+            <div>
+              <h2>{selectedFlow.name}</h2>
+              <span className={`status ${flowStatusClasses[selectedFlow.status]}`}>
+                {flowStatusLabels[selectedFlow.status]}
+              </span>
+            </div>
+            <div className="button-row">
+              {selectedFlow.status === "RASCUNHO" ? (
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => void changeFlow("start_approval")}
+                  disabled={flowBusy}
+                >
+                  <Play size={16} />
+                  Enviar para aprovação
+                </button>
+              ) : null}
+              {selectedFlow.status === "EM_APROVACAO" ? (
+                <button
+                  className="button success"
+                  type="button"
+                  onClick={() => void changeFlow("close")}
+                  disabled={flowBusy || selectedFlow.summary.undecidedCount > 0}
+                  title={
+                    selectedFlow.summary.undecidedCount > 0
+                      ? `Ainda existem ${selectedFlow.summary.undecidedCount} pagamento(s) aguardando decisão`
+                      : "Fechar e bloquear o fluxo diário"
+                  }
+                >
+                  <LockKeyhole size={16} />
+                  Fechar fluxo
+                </button>
+              ) : null}
+              {selectedFlow.status === "FECHADO" ? (
+                <>
+                  <a
+                    className="button secondary"
+                    href={`/api/daily-flows/${selectedFlow.id}/report`}
+                  >
+                    <FileDown size={16} />
+                    Relatório final
+                  </a>
+                  {isCoordinator ? (
+                    <button
+                      className="button warning"
+                      type="button"
+                      onClick={() => setFlowReopenOpen(true)}
+                      disabled={flowBusy}
+                    >
+                      <RotateCcw size={16} />
+                      Reabrir fechamento
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="toolbar">
+            <div className="field">
+              <label htmlFor="daily-flow">Fluxo diário</label>
+              <select
+                className="select"
+                id="daily-flow"
+                value={effectiveFlowId}
+                onChange={(event) => {
+                  setFlowId(event.target.value);
+                  setBatch([]);
+                }}
+                disabled={flowsLoading || flowBusy}
+              >
+                {flowData?.flows.map((flow) => (
+                  <option key={flow.id} value={flow.id}>
+                    {flow.name} - {flowStatusLabels[flow.status]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="muted">
+              {selectedFlow.status === "RASCUNHO"
+                ? "Ajustes e conferências estão liberados."
+                : selectedFlow.status === "EM_APROVACAO"
+                  ? `${selectedFlow.summary.undecidedCount} pagamento(s) aguardando decisão.`
+                  : `Fechado em ${selectedFlow.closedAt ? dateTime(selectedFlow.closedAt) : "-"}. Alterações bloqueadas.`}
+            </span>
+          </div>
+
+          {selectedFlow.status === "FECHADO" ? (
+            <section className="approval-stats">
+              <div className="approval-stat approval-stat-success">
+                <span>Aprovados</span>
+                <strong>{selectedFlow.summary.approved.count}</strong>
+                <small>{money(selectedFlow.summary.approved.amount)}</small>
+              </div>
+              <div className="approval-stat approval-stat-danger">
+                <span>Reprovados</span>
+                <strong>{selectedFlow.summary.rejected.count}</strong>
+                <small>{money(selectedFlow.summary.rejected.amount)}</small>
+              </div>
+              <div className="approval-stat approval-stat-warning">
+                <span>Remarcados</span>
+                <strong>{selectedFlow.summary.transferred.count}</strong>
+                <small>{money(selectedFlow.summary.transferred.amount)}</small>
+              </div>
+            </section>
+          ) : null}
+        </section>
+      ) : flowsLoading ? (
+        <div className="panel pad">Carregando fluxos diários...</div>
+      ) : (
+        <div className="alert">Importe uma planilha para criar o primeiro fluxo diário.</div>
+      )}
+
       <section className="approval-stats">
         <div className="approval-stat approval-stat-success">
           <span>Aprovados</span>
@@ -324,7 +544,7 @@ export function PaymentsTab() {
         <button
           className="button"
           type="button"
-          disabled={batchPayments.length === 0 || busy}
+          disabled={batchPayments.length === 0 || busy || flowLocked}
           onClick={() => setBatchOpen(true)}
           title={
             batchPayments.length === 0
@@ -343,6 +563,7 @@ export function PaymentsTab() {
         ) : null}
       </section>
 
+      {flowError ? <div className="alert error">{flowError}</div> : null}
       {error ? <div className="alert error">{error}</div> : null}
       {message ? <div className="alert success">{message}</div> : null}
 
@@ -439,7 +660,7 @@ export function PaymentsTab() {
                   <button
                     className="button success"
                     type="button"
-                    disabled={busy || selected.status === "APROVADO"}
+                    disabled={busy || flowLocked || selected.status === "APROVADO"}
                     onClick={() => void runAction("approve")}
                   >
                     <CheckCircle2 size={16} />
@@ -448,7 +669,7 @@ export function PaymentsTab() {
                   <button
                     className="button danger"
                     type="button"
-                    disabled={busy || selected.status === "APROVADO"}
+                    disabled={busy || flowLocked || selected.status === "APROVADO"}
                     onClick={() => setMode("reject")}
                   >
                     <XCircle size={16} />
@@ -457,7 +678,7 @@ export function PaymentsTab() {
                   <button
                     className="button warning"
                     type="button"
-                    disabled={busy || selected.status === "APROVADO"}
+                    disabled={busy || flowLocked || selected.status === "APROVADO"}
                     onClick={() => {
                       setNewDueDate(selected.currentDueDate.slice(0, 10));
                       setMode("transfer");
@@ -471,7 +692,7 @@ export function PaymentsTab() {
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={busy || selected.status === "CANCELADO"}
+                        disabled={busy || flowLocked || selected.status === "CANCELADO"}
                         onClick={() => setMode("cancel")}
                       >
                         <XCircle size={16} />
@@ -480,7 +701,7 @@ export function PaymentsTab() {
                       <button
                         className="button ghost"
                         type="button"
-                        disabled={busy}
+                        disabled={busy || flowLocked}
                         onClick={() => setMode("reopen")}
                       >
                         <RotateCcw size={16} />
@@ -647,6 +868,48 @@ export function PaymentsTab() {
                 type="button"
                 onClick={() => setBatchOpen(false)}
                 disabled={busy}
+              >
+                Voltar
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {flowReopenOpen ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <form
+            className="modal"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void changeFlow("reopen", flowReason);
+            }}
+          >
+            <h2>Reabrir fechamento</h2>
+            <p>{selectedFlow?.name}</p>
+            <div className="field">
+              <label htmlFor="flow-reopen-reason">Motivo da reabertura</label>
+              <textarea
+                className="textarea"
+                id="flow-reopen-reason"
+                value={flowReason}
+                onChange={(event) => setFlowReason(event.target.value)}
+                required
+                minLength={3}
+              />
+            </div>
+            <div className="button-row">
+              <button className="button warning" type="submit" disabled={flowBusy}>
+                {flowBusy ? "Reabrindo..." : "Confirmar reabertura"}
+              </button>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => {
+                  setFlowReopenOpen(false);
+                  setFlowReason("");
+                }}
+                disabled={flowBusy}
               >
                 Voltar
               </button>

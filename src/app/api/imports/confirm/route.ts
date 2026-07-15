@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ActionType, PaymentStatus } from "@prisma-generated/enums";
+import { ActionType, DailyFlowEventType, PaymentStatus } from "@prisma-generated/enums";
 import { auditLog } from "@/lib/audit";
 import { ApiError, handleApiError, ok } from "@/lib/api";
 import { requireTab } from "@/lib/auth";
@@ -32,6 +32,7 @@ const contributionSchema = z.object({
 
 const confirmSchema = z.object({
   fileName: z.string().min(1),
+  importName: z.string().trim().max(120).optional(),
   totalRows: z.number().int().nonnegative(),
   rows: z.array(rowSchema),
   contributions: z.array(contributionSchema).default([]),
@@ -41,10 +42,22 @@ function dateFromIsoDay(day: string) {
   return new Date(`${day}T00:00:00.000Z`);
 }
 
+function defaultFlowName() {
+  const date = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+  })
+    .format(new Date())
+    .replace("/", ".");
+  return `FLUXO DE PAGAMENTOS ${date}`;
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireTab("importar");
     const body = confirmSchema.parse(await request.json());
+    const flowName = body.importName || defaultFlowName();
 
     const validRows = body.rows.filter((row) => row.errors.length === 0 && !row.duplicate);
     const validContributions = body.contributions.filter((row) => row.errors.length === 0);
@@ -109,11 +122,24 @@ export async function POST(request: Request) {
 
       const importBatch = await tx.importBatch.create({
         data: {
-          fileName: body.fileName,
+          fileName: flowName,
           totalRows: body.totalRows,
           validRows: rowsToImport.length,
           invalidRows: body.rows.length - rowsToImport.length,
           importedById: user.id,
+        },
+      });
+
+      const dailyFlow = await tx.dailyFlow.create({
+        data: {
+          importBatchId: importBatch.id,
+          events: {
+            create: {
+              actorId: user.id,
+              type: DailyFlowEventType.CRIADO,
+              metadata: JSON.stringify({ arquivoOrigem: body.fileName, nome: flowName }),
+            },
+          },
         },
       });
 
@@ -142,7 +168,7 @@ export async function POST(request: Request) {
             actorId: user.id,
             type: ActionType.IMPORTAR,
             newStatus: PaymentStatus.PENDENTE,
-            note: `Importado do arquivo ${body.fileName}`,
+            note: `Importado no fluxo ${flowName}`,
           },
         });
       }
@@ -158,10 +184,10 @@ export async function POST(request: Request) {
         });
       }
 
-      return { importBatch, createdAccounts };
+      return { importBatch, dailyFlow, createdAccounts };
     });
 
-    const { importBatch, createdAccounts } = batch;
+    const { importBatch, dailyFlow, createdAccounts } = batch;
 
     await auditLog({
       actorId: user.id,
@@ -170,6 +196,8 @@ export async function POST(request: Request) {
       entityId: importBatch.id,
       metadata: {
         fileName: importBatch.fileName,
+        arquivoOrigem: body.fileName,
+        fluxoDiarioId: dailyFlow.id,
         importedRows: rowsToImport.length,
         skippedRows: validRows.length - rowsToImport.length,
         contributions: validContributions.length,
@@ -183,6 +211,8 @@ export async function POST(request: Request) {
     return ok(
       {
         batchId: importBatch.id,
+        flowId: dailyFlow.id,
+        flowName: importBatch.fileName,
         importedRows: rowsToImport.length,
         skippedRows: validRows.length - rowsToImport.length,
         importedContributions: validContributions.length,

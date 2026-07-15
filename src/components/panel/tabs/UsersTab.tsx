@@ -505,10 +505,6 @@ export function UsersTab() {
                 onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })}
                 placeholder="(11) 98765-4321"
               />
-              <small className="muted">
-                É para este número que a notificação de WhatsApp do gestor vai. Em branco, ele
-                não é notificado.
-              </small>
             </div>
 
             <div className="field">
