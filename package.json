@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "postinstall": "npm run prisma:generate",
+    "postinstall": "npm run prisma:generate && npm run db:setup",
     "prebuild": "npm run prisma:generate && npm run db:setup",
     "build": "next build",
     "start": "npm run db:setup && next start",
