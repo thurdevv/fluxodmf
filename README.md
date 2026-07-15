@@ -65,13 +65,14 @@ O acesso é por perfil, e cada aba do painel só existe para quem pode vê-la:
 
 | | Dashboard | Importação | Conciliação | Pagamentos | Usuários | Permissões | Logs |
 | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| **Funcionário** | ✓ | ✓ | | | | | |
+| **Funcionário** | ✓ | ✓ | ✓ | | | | |
 | **Gestor** | ✓ | ✓ | ✓ | ✓ | | | |
 | **Coordenador** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-Gestor edita pagamentos e gerencia o fluxo. Coordenador tem acesso total,
-incluindo as ações críticas (cancelar e reabrir pagamento, gerenciar usuários e
-permissões).
+Todos os perfis acessam as áreas do painel: Dashboard, Importação e Conciliação.
+A operação de pagamentos permanece restrita a Gestor e Coordenador. Coordenador
+tem acesso total, incluindo as ações críticas (cancelar e reabrir pagamento,
+gerenciar usuários e permissões).
 
 Esconder a aba **não** é a proteção: cada rota de API revalida o perfil no
 servidor, e perfil e status são lidos do banco a cada requisição, nunca do

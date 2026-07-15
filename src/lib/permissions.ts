@@ -7,8 +7,8 @@ export { Role };
  * consultam este modulo, para que esconder uma aba e bloquear o endpoint
  * correspondente nunca saiam de sincronia.
  *
- * Funcionario  -> Dashboard e Importacao.
- * Gestor       -> tudo do Funcionario + Pagamentos (editar/gerenciar fluxos).
+ * Funcionario  -> Painel.
+ * Gestor       -> Painel + Operacao.
  * Coordenador  -> acesso total, incluindo areas criticas (usuarios, permissoes, logs).
  */
 export const TAB_IDS = [
@@ -30,9 +30,7 @@ const CRITICAL: Role[] = [Role.COORDENADOR];
 export const tabRoles: Record<TabId, Role[]> = {
   dashboard: ALL_ROLES,
   importar: ALL_ROLES,
-  // A conciliacao expoe o gasto individual de cada colaborador e existe para
-  // cobrar a nota dele: e trabalho de quem gerencia, nao de todo mundo.
-  conciliacao: MANAGEMENT,
+  conciliacao: ALL_ROLES,
   pagamentos: MANAGEMENT,
   usuarios: CRITICAL,
   permissoes: CRITICAL,
@@ -69,7 +67,7 @@ export const roleLabels: Record<Role, string> = {
 };
 
 export const roleDescriptions: Record<Role, string> = {
-  FUNCIONARIO: "Visualiza o dashboard e importa o fluxo de pagamentos.",
-  GESTOR: "Tudo do funcionário, mais editar pagamentos e gerenciar fluxos.",
+  FUNCIONARIO: "Acessa todas as áreas do painel, incluindo a conciliação.",
+  GESTOR: "Acessa o painel e a operação de pagamentos.",
   COORDENADOR: "Acesso total, incluindo usuários, permissões e configurações.",
 };

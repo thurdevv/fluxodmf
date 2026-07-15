@@ -49,7 +49,7 @@ export async function POST(
     const { id } = await context.params;
     const body = actionSchema.parse(await request.json());
 
-    // Funcionario so ve dashboard e importacao: nao age sobre pagamentos.
+    // Funcionário acessa o painel, mas não age sobre pagamentos.
     if (!canEditPayments(user.role)) {
       throw new ApiError(403, "Seu perfil não tem permissão para agir sobre pagamentos.");
     }
