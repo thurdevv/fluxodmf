@@ -189,7 +189,9 @@ export async function PATCH(request: Request) {
       data: {
         name: body.name?.trim(),
         email: body.email?.trim().toLowerCase(),
-        phone: body.phone?.trim() ?? undefined,
+        // Campo vazio limpa o telefone. Sem o null explicito viraria a string
+        // vazia, que passa por "tem telefone" e quebra a notificacao.
+        phone: body.phone === undefined ? undefined : body.phone.trim() || null,
         role: body.role,
         status: body.status,
         passwordHash: body.password ? await hashPassword(body.password) : undefined,
@@ -218,6 +220,9 @@ export async function PATCH(request: Request) {
     }
     if (body.email && body.email.trim().toLowerCase() !== current.email) {
       changes.email = { de: current.email, para: body.email.trim().toLowerCase() };
+    }
+    if (body.phone !== undefined && (body.phone.trim() || null) !== current.phone) {
+      changes.telefone = { de: current.phone ?? "-", para: body.phone.trim() || "-" };
     }
     if (body.password) changes.senha = { de: "***", para: "redefinida" };
     if (body.workIds) changes.obras = { de: "-", para: body.workIds.length };

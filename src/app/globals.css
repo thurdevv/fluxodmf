@@ -161,7 +161,10 @@ textarea:disabled {
   gap: 6px;
 }
 
-.field label {
+/* .field-label e para rotular um GRUPO de controles (via aria-labelledby),
+   onde um <label> solto nao teria a quem apontar. */
+.field label,
+.field .field-label {
   font-family: var(--font-ui);
   color: var(--text);
   font-weight: 550;
@@ -910,6 +913,10 @@ textarea:disabled {
   border: 1px solid var(--line);
   background: #ffffff;
   box-shadow: 0 28px 80px rgba(27, 18, 51, 0.28);
+  /* Formulario longo (editar usuario) nao pode empurrar os botoes para fora da
+     tela: o backdrop reserva 18px de cada lado. */
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
 }
 
 .modal h2 {

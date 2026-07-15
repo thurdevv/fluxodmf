@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { usePanel } from "@/components/panel/PanelContext";
 import { useFetchData } from "@/components/panel/useFetchData";
 import { dateTime, userStatusLabels } from "@/lib/format";
 import { Role, roleLabels } from "@/lib/permissions";
+import { UserStatus } from "@prisma-generated/enums";
 
 export type PanelUserRow = {
   id: string;
@@ -44,6 +45,29 @@ const emptyForm = {
   role: Role.FUNCIONARIO as Role,
 };
 
+/** Campos que a edicao rapida altera. Senha em branco mantem a atual. */
+type EditForm = {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  role: Role;
+  status: PanelUserRow["status"];
+  workIds: string[];
+};
+
+function editFormFor(user: PanelUserRow): EditForm {
+  return {
+    name: user.name,
+    email: user.email,
+    phone: user.phone ?? "",
+    password: "",
+    role: user.role,
+    status: user.status,
+    workIds: user.works.map((work) => work.id),
+  };
+}
+
 export function UsersTab() {
   const { user: currentUser } = usePanel();
   const { data, error, loading, reload, setError } =
@@ -53,8 +77,42 @@ export function UsersTab() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<PanelUserRow | null>(null);
+  const [editing, setEditing] = useState<PanelUserRow | null>(null);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
 
   const users = data?.users ?? [];
+  const works = data?.works ?? [];
+
+  function startEditing(target: PanelUserRow) {
+    setEditing(target);
+    setEditForm(editFormFor(target));
+    setError("");
+    setMessage("");
+  }
+
+  function closeEditing() {
+    setEditing(null);
+    setEditForm(null);
+  }
+
+  async function saveEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!editing || !editForm) return;
+
+    const body: Record<string, unknown> = {
+      name: editForm.name,
+      email: editForm.email,
+      phone: editForm.phone,
+      role: editForm.role,
+      status: editForm.status,
+      workIds: editForm.workIds,
+    };
+    // Enviar senha vazia redefiniria a senha do usuario para nada.
+    if (editForm.password) body.password = editForm.password;
+
+    const saved = await patchUser(editing.id, body, `${editForm.name} atualizado.`);
+    if (saved) closeEditing();
+  }
 
   async function patchUser(id: string, body: Record<string, unknown>, successMessage: string) {
     setBusyId(id);
@@ -71,13 +129,15 @@ export function UsersTab() {
 
       if (!response.ok) {
         setError(data.error ?? "Não foi possível atualizar o usuário.");
-        return;
+        return false;
       }
 
       setMessage(successMessage);
       reload();
+      return true;
     } catch {
       setError("Falha de conexão.");
+      return false;
     } finally {
       setBusyId("");
     }
@@ -339,6 +399,16 @@ export function UsersTab() {
                     </td>
                     <td>
                       <div className="button-row">
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={busyId === item.id}
+                          onClick={() => startEditing(item)}
+                          title="Editar cadastro"
+                        >
+                          <Pencil size={14} />
+                          Editar
+                        </button>
                         {item.status === "ATIVO" ? (
                           <button
                             className="button secondary"
@@ -395,6 +465,151 @@ export function UsersTab() {
           </div>
         </div>
       </section>
+
+      {editing && editForm ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <form className="modal" onSubmit={saveEdit}>
+            <h2>Editar usuário</h2>
+            <p>{editing.username}</p>
+
+            <div className="field">
+              <label htmlFor="edit-name">Nome</label>
+              <input
+                className="input"
+                id="edit-name"
+                value={editForm.name}
+                onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
+                required
+                minLength={2}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="edit-email">E-mail</label>
+              <input
+                className="input"
+                id="edit-email"
+                type="email"
+                value={editForm.email}
+                onChange={(event) => setEditForm({ ...editForm, email: event.target.value })}
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="edit-phone">Telefone</label>
+              <input
+                className="input"
+                id="edit-phone"
+                value={editForm.phone}
+                onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })}
+                placeholder="(11) 98765-4321"
+              />
+              <small className="muted">
+                É para este número que a notificação de WhatsApp do gestor vai. Em branco, ele
+                não é notificado.
+              </small>
+            </div>
+
+            <div className="field">
+              <label htmlFor="edit-role">Perfil</label>
+              <select
+                className="select"
+                id="edit-role"
+                value={editForm.role}
+                onChange={(event) =>
+                  setEditForm({ ...editForm, role: event.target.value as Role })
+                }
+              >
+                {Object.values(Role).map((role) => (
+                  <option key={role} value={role}>
+                    {roleLabels[role]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="edit-status">Status</label>
+              <select
+                className="select"
+                id="edit-status"
+                value={editForm.status}
+                onChange={(event) =>
+                  setEditForm({
+                    ...editForm,
+                    status: event.target.value as PanelUserRow["status"],
+                  })
+                }
+              >
+                {Object.values(UserStatus).map((status) => (
+                  <option key={status} value={status}>
+                    {userStatusLabels[status]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field" role="group" aria-labelledby="edit-works-label">
+              {/* Rotulo de grupo: nao aponta para um controle unico, entao e um
+                  span com aria-labelledby em vez de um label solto. */}
+              <span id="edit-works-label" className="field-label">
+                Contas
+              </span>
+              <div className="checkbox-grid">
+                {works.map((work) => (
+                  <label className="checkbox-line" key={work.id}>
+                    <input
+                      type="checkbox"
+                      checked={editForm.workIds.includes(work.id)}
+                      onChange={() =>
+                        setEditForm({
+                          ...editForm,
+                          workIds: editForm.workIds.includes(work.id)
+                            ? editForm.workIds.filter((id) => id !== work.id)
+                            : [...editForm.workIds, work.id],
+                        })
+                      }
+                    />
+                    {work.name}
+                  </label>
+                ))}
+                {works.length === 0 ? <span className="muted">Nenhuma conta cadastrada.</span> : null}
+              </div>
+              <small className="muted">
+                Gestor sem conta atribuída não entra na notificação do fluxo.
+              </small>
+            </div>
+
+            <div className="field">
+              <label htmlFor="edit-password">Nova senha</label>
+              <input
+                className="input"
+                id="edit-password"
+                type="password"
+                value={editForm.password}
+                onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
+                placeholder="Em branco mantém a senha atual"
+                minLength={4}
+              />
+            </div>
+
+            <div className="button-row">
+              <button className="button success" type="submit" disabled={busyId === editing.id}>
+                {busyId === editing.id ? "Salvando..." : "Salvar"}
+              </button>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={closeEditing}
+                disabled={busyId === editing.id}
+              >
+                Voltar
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       {confirmDelete ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true">

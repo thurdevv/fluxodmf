@@ -21,10 +21,13 @@ dev.db-journal
 dev.db-shm
 dev.db-wal
 
-# Planilhas de fluxo: contem dados reais de fornecedores e funcionarios
-# (nomes, valores, reembolsos). Nao versionar.
+# Planilhas de fluxo e extratos: contem dados reais de fornecedores e
+# funcionarios (nomes, CPFs, valores, reembolsos). Nao versionar.
+# Os exemplos de formato em samples/ sao a excecao: nascem anonimizados.
 *.xlsx
 *.xls
+*.csv
+!samples/*.csv
 
 # Sistema operacional / editor
 .DS_Store

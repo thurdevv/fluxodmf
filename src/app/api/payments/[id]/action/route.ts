@@ -22,7 +22,10 @@ const actionSchema = z.object({
   note: z.string().trim().optional(),
 });
 
-/** Cancelar e reabrir mexem em pagamento ja decidido: so o coordenador faz. */
+/**
+ * Cancelar e voltar para em aberto mexem em pagamento ja decidido: so o
+ * coordenador faz. `reopen` e o nome interno da acao "Voltar para em aberto".
+ */
 const CRITICAL_ACTIONS = ["cancel", "reopen"];
 
 function requireReason(reason: string | undefined, message: string) {
@@ -52,7 +55,10 @@ export async function POST(
     }
 
     if (CRITICAL_ACTIONS.includes(body.action) && !canAdminister(user.role)) {
-      throw new ApiError(403, "Somente o coordenador pode cancelar ou reabrir pagamentos.");
+      throw new ApiError(
+        403,
+        "Somente o coordenador pode cancelar ou voltar pagamentos para em aberto.",
+      );
     }
 
     const payment = await prisma.payment.findUnique({
@@ -69,7 +75,10 @@ export async function POST(
     }
 
     if (payment.status === PaymentStatus.CANCELADO && body.action !== "reopen") {
-      throw new ApiError(409, "Pagamento cancelado precisa ser reaberto antes de novas ações.");
+      throw new ApiError(
+        409,
+        "Pagamento cancelado precisa voltar para em aberto antes de novas ações.",
+      );
     }
 
     let newStatus: PaymentStatus = payment.status;
@@ -116,7 +125,7 @@ export async function POST(
     }
 
     if (body.action === "reopen") {
-      requireReason(body.reason, "Informe o motivo da reabertura.");
+      requireReason(body.reason, "Informe o motivo para voltar o pagamento a em aberto.");
       newStatus = PaymentStatus.PENDENTE;
       actionType = ActionType.REABRIR;
     }

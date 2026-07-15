@@ -14,6 +14,7 @@ export { Role };
 export const TAB_IDS = [
   "dashboard",
   "importar",
+  "conciliacao",
   "pagamentos",
   "usuarios",
   "permissoes",
@@ -29,6 +30,9 @@ const CRITICAL: Role[] = [Role.COORDENADOR];
 export const tabRoles: Record<TabId, Role[]> = {
   dashboard: ALL_ROLES,
   importar: ALL_ROLES,
+  // A conciliacao expoe o gasto individual de cada colaborador e existe para
+  // cobrar a nota dele: e trabalho de quem gerencia, nao de todo mundo.
+  conciliacao: MANAGEMENT,
   pagamentos: MANAGEMENT,
   usuarios: CRITICAL,
   permissoes: CRITICAL,

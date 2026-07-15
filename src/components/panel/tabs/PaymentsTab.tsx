@@ -63,16 +63,17 @@ const modeLabels: Record<Mode, string> = {
   reject: "Reprovar pagamento",
   transfer: "Alterar data de vencimento",
   cancel: "Cancelar pagamento",
-  reopen: "Reabrir pagamento",
+  reopen: "Voltar pagamento para em aberto",
 };
 
-/** Acoes oferecidas no lote. Reprovar e alterar data pedem motivo. */
-type BatchAction = "approve" | "reject" | "transfer";
+/** Acoes oferecidas no lote. Tudo menos aprovar pede motivo. */
+type BatchAction = "approve" | "reject" | "transfer" | "reopen";
 
 const batchActionLabels: Record<BatchAction, string> = {
   approve: "Aprovar",
   reject: "Reprovar",
   transfer: "Alterar data",
+  reopen: "Voltar para em aberto",
 };
 
 type BatchResult = { done: number; failed: { supplier: string; error: string }[] };
@@ -185,9 +186,9 @@ export function PaymentsTab() {
     const payload: Record<string, unknown> =
       batchAction === "approve"
         ? {}
-        : batchAction === "reject"
-          ? { reason: batchReason }
-          : { reason: batchReason, newDueDate: batchDueDate };
+        : batchAction === "transfer"
+          ? { reason: batchReason, newDueDate: batchDueDate }
+          : { reason: batchReason };
 
     const result: BatchResult = { done: 0, failed: [] };
 
@@ -483,7 +484,7 @@ export function PaymentsTab() {
                         onClick={() => setMode("reopen")}
                       >
                         <RotateCcw size={16} />
-                        Reabrir
+                        Voltar para em aberto
                       </button>
                     </>
                   ) : null}
@@ -585,6 +586,10 @@ export function PaymentsTab() {
                 <option value="approve">Aprovar os {batchPayments.length}</option>
                 <option value="reject">Reprovar os {batchPayments.length}</option>
                 <option value="transfer">Alterar a data dos {batchPayments.length}</option>
+                {/* Voltar para em aberto e critico: a rota so aceita do coordenador. */}
+                {isCoordinator ? (
+                  <option value="reopen">Voltar os {batchPayments.length} para em aberto</option>
+                ) : null}
               </select>
             </div>
 

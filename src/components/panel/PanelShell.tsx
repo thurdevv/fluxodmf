@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Scale,
   ScrollText,
   ShieldCheck,
   Users,
@@ -21,6 +22,7 @@ import { ImportTab } from "@/components/panel/tabs/ImportTab";
 import { LogsTab } from "@/components/panel/tabs/LogsTab";
 import { PaymentsTab } from "@/components/panel/tabs/PaymentsTab";
 import { PermissionsTab } from "@/components/panel/tabs/PermissionsTab";
+import { ReconciliationTab } from "@/components/panel/tabs/ReconciliationTab";
 import { UsersTab } from "@/components/panel/tabs/UsersTab";
 import { roleLabels, TAB_IDS, type TabId } from "@/lib/permissions";
 
@@ -57,6 +59,15 @@ const tabDefinitions: TabDefinition[] = [
     section: "PAINEL",
     icon: FileSpreadsheet,
     Component: ImportTab,
+  },
+  {
+    id: "conciliacao",
+    label: "Conciliação",
+    title: "Conciliação de despesas",
+    subtitle: "Cartão CAJU x sistema interno: notas pendentes",
+    section: "PAINEL",
+    icon: Scale,
+    Component: ReconciliationTab,
   },
   {
     id: "pagamentos",

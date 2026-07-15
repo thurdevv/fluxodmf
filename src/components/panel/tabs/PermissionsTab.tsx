@@ -17,6 +17,7 @@ type UsersResponse = {
 const tabLabels: Record<(typeof TAB_IDS)[number], string> = {
   dashboard: "Dashboard",
   importar: "Importação",
+  conciliacao: "Conciliação",
   pagamentos: "Pagamentos",
   usuarios: "Usuários",
   permissoes: "Permissões",

@@ -1,19 +1,25 @@
 import crypto from "node:crypto";
-import { parse as parseCsv } from "csv-parse/sync";
-import ExcelJS from "exceljs";
 import {
   matchWork,
   normalizeName as normalize,
   type WorkMatcher,
 } from "@/lib/cost-center";
+import {
+  cellValue,
+  findColumn,
+  isoDate,
+  loadFirstWorksheet,
+  parseCsvRows,
+  parseDate,
+  parseMoney,
+  type RawRow,
+} from "@/lib/spreadsheet";
 import type {
   ImportContributionRow,
   ImportPreview,
   ImportSummaryCheck,
   PaymentImportRow,
 } from "@/types";
-
-type RawRow = Record<string, unknown>;
 
 /**
  * Colunas da planilha de fluxo: FORNECEDOR | DATA | DESCRICAO | VALOR |
@@ -38,63 +44,12 @@ const summaryHeaderLabels = ["conta", "valor", "status"];
 const contributionSectionLabels = ["aportes", "aporte"];
 const totalLabels = ["total", "subtotal", "total geral", "soma"];
 
-function findColumn(headers: string[], aliases: string[]) {
-  const normalizedAliases = aliases.map(normalize);
-  return headers.find((header) => normalizedAliases.includes(normalize(header)));
-}
-
-function parseMoney(value: unknown) {
-  if (typeof value === "number") return value;
-  const text = String(value ?? "")
-    .replace(/\s/g, "")
-    .replace(/R\$/gi, "");
-
-  if (!text) return NaN;
-
-  if (text.includes(",")) {
-    return Number(text.replace(/\./g, "").replace(",", "."));
-  }
-
-  return Number(text);
-}
-
-function excelSerialDate(serial: number) {
-  const utcDays = Math.floor(serial - 25569);
-  const seconds = utcDays * 86400;
-  const date = new Date(seconds * 1000);
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function parseDate(value: unknown) {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value;
-  }
-
-  if (typeof value === "number" && value > 20000) {
-    return excelSerialDate(value);
-  }
-
-  const text = String(value ?? "").trim();
-  if (!text) return null;
-
-  const brMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-  if (brMatch) {
-    const day = Number(brMatch[1]);
-    const month = Number(brMatch[2]) - 1;
-    const fullYear =
-      brMatch[3].length === 2 ? Number(`20${brMatch[3]}`) : Number(brMatch[3]);
-    return new Date(Date.UTC(fullYear, month, day));
-  }
-
-  const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function isoDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function buildUniqueKey(input: {
+/**
+ * Identidade de um lancamento. Exportada porque o conversor precisa recusar as
+ * mesmas duplicatas que a importacao recusaria: se as duas pontas discordarem,
+ * o usuario baixa um fluxo que o proprio sistema rejeita.
+ */
+export function buildUniqueKey(input: {
   supplierName: string;
   description: string;
   amount: number;
@@ -113,38 +68,6 @@ function buildUniqueKey(input: {
       ].join("|"),
     )
     .digest("hex");
-}
-
-function detectDelimiter(text: string) {
-  const firstLine = text.split(/\r?\n/).find((line) => line.trim()) ?? "";
-  const commas = (firstLine.match(/,/g) ?? []).length;
-  const semicolons = (firstLine.match(/;/g) ?? []).length;
-  return semicolons > commas ? ";" : ",";
-}
-
-function parseCsvRows(arrayBuffer: ArrayBuffer) {
-  const text = Buffer.from(arrayBuffer).toString("utf8");
-  return parseCsv(text, {
-    bom: true,
-    columns: true,
-    delimiter: detectDelimiter(text),
-    relax_column_count: true,
-    skip_empty_lines: true,
-    trim: true,
-  }) as RawRow[];
-}
-
-function cellValue(value: ExcelJS.CellValue) {
-  if (value == null) return "";
-  if (value instanceof Date) return value;
-  if (typeof value !== "object") return value;
-  if ("text" in value && value.text) return value.text;
-  if ("result" in value && value.result != null) return value.result;
-  if ("richText" in value && Array.isArray(value.richText)) {
-    return value.richText.map((part) => part.text).join("");
-  }
-  if ("formula" in value) return "";
-  return String(value);
 }
 
 type SheetGrid = {
@@ -184,12 +107,7 @@ function isEndOfPayments(cells: string[], columnIndexes: { supplier: number; amo
 }
 
 async function parseWorkbook(arrayBuffer: ArrayBuffer): Promise<SheetGrid> {
-  const workbook = new ExcelJS.Workbook();
-  const loadWorkbook = workbook.xlsx.load.bind(workbook.xlsx) as unknown as (
-    buffer: Uint8Array,
-  ) => Promise<ExcelJS.Workbook>;
-  await loadWorkbook(Buffer.from(arrayBuffer));
-  const worksheet = workbook.worksheets[0];
+  const worksheet = await loadFirstWorksheet(arrayBuffer);
 
   if (!worksheet) return { headers: [], paymentRows: [], trailing: [] };
 

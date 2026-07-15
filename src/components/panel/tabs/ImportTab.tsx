@@ -1,9 +1,18 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  Send,
+  Upload,
+  Wand2,
+} from "lucide-react";
 import { ChangeEvent, useRef, useState } from "react";
 import { Money } from "@/components/Money";
 import { money, shortDate } from "@/lib/format";
+import type { FlowConversion } from "@/lib/flow-converter";
 import type { ImportPreview } from "@/types";
 
 type ConfirmResponse = {
@@ -11,6 +20,15 @@ type ConfirmResponse = {
   skippedRows?: number;
   importedContributions?: number;
   createdAccounts?: string[];
+  error?: string;
+};
+
+type NotifyResponse = {
+  notified?: number;
+  sent?: number;
+  simulated?: number;
+  failed?: number;
+  provider?: string;
   error?: string;
 };
 
@@ -22,6 +40,18 @@ export function ImportTab() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Notificacao aos gestores ao final da importacao.
+  const [notifyOnConfirm, setNotifyOnConfirm] = useState(true);
+  const [notifying, setNotifying] = useState(false);
+
+  // Conversor do export bruto do Conta Azul.
+  const [rawFile, setRawFile] = useState<File | null>(null);
+  const [conversion, setConversion] = useState<FlowConversion | null>(null);
+  const [aportes, setAportes] = useState<Record<string, string>>({});
+  const [converting, setConverting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const rawInputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setPreview(null);
@@ -63,6 +93,152 @@ export function ImportTab() {
     }
   }
 
+  function onRawFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setRawFile(event.target.files?.[0] ?? null);
+    setConversion(null);
+    setAportes({});
+    setError("");
+    setMessage("");
+  }
+
+  /** Le a planilha bruta e mostra o que sairia, sem gerar o arquivo ainda: os
+   *  aportes so podem ser informados depois que sabemos quais contas existem. */
+  async function convertPreview() {
+    if (!rawFile) return;
+
+    setConverting(true);
+    setError("");
+    setMessage("");
+    setConversion(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", rawFile);
+
+      const response = await fetch("/api/imports/convert/preview", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error ?? "Não foi possível ler a planilha bruta.");
+        return;
+      }
+
+      setConversion(data as FlowConversion);
+    } catch {
+      setError("Falha de conexão ao enviar a planilha bruta.");
+    } finally {
+      setConverting(false);
+    }
+  }
+
+  async function downloadFlow() {
+    if (!rawFile || !conversion) return;
+
+    setDownloading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", rawFile);
+      formData.append(
+        "aportes",
+        JSON.stringify(
+          conversion.accounts.map((account) => ({
+            accountLabel: account.accountLabel,
+            amount: Number(aportes[account.accountLabel]?.replace(",", ".") ?? 0) || 0,
+          })),
+        ),
+      );
+
+      const response = await fetch("/api/imports/convert", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error ?? "Não foi possível gerar a planilha de fluxo.");
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = conversion.suggestedFileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+
+      setMessage(
+        `${conversion.suggestedFileName} gerado. Envie esse arquivo no campo de importação acima.`,
+      );
+    } catch {
+      setError("Falha de conexão ao gerar a planilha de fluxo.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  /** Devolve o resultado em vez de exibir: o chamador decide se vira alerta de
+   *  sucesso ou de erro, e a importacao pode ter dado certo mesmo com o aviso
+   *  falhando. */
+  async function notifyManagers(): Promise<{ ok: boolean; message: string }> {
+    setNotifying(true);
+
+    try {
+      const response = await fetch("/api/notifications", { method: "POST" });
+      const data = (await response.json()) as NotifyResponse;
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          message: `Não foi possível notificar os gestores: ${data.error ?? "erro desconhecido"}.`,
+        };
+      }
+
+      if (!data.notified) {
+        return { ok: true, message: "Nenhum gestor para notificar." };
+      }
+
+      // `notified` conta os registros criados, e um FALHOU tambem e um deles.
+      // Dizer "N notificados" incluindo as falhas mentiria sobre quem foi
+      // avisado de fato.
+      const reached = (data.sent ?? 0) + (data.simulated ?? 0);
+      const failed = data.failed ?? 0;
+
+      if (reached === 0) {
+        return {
+          ok: false,
+          message: `Nenhum gestor foi notificado: ${failed} sem telefone válido. Veja o motivo na aba Pagamentos.`,
+        };
+      }
+
+      const parts = [`${reached} gestor(es) notificado(s)`];
+      if (data.simulated) parts.push(`${data.simulated} em modo simulado`);
+      if (failed) parts.push(`${failed} sem telefone válido`);
+      return { ok: true, message: `${parts.join(", ")}.` };
+    } catch {
+      return { ok: false, message: "Falha de conexão ao notificar os gestores." };
+    } finally {
+      setNotifying(false);
+    }
+  }
+
+  async function notifyFromButton() {
+    const result = await notifyManagers();
+    if (result.ok) {
+      setError("");
+      setMessage(result.message);
+    } else {
+      setMessage("");
+      setError(result.message);
+    }
+  }
+
   async function confirmImport() {
     if (!preview) return;
 
@@ -99,7 +275,13 @@ export function ImportTab() {
       setPreview(null);
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setMessage(`${parts.join(", ")}.`);
+
+      // O aviso so faz sentido depois que o lote entrou: e o fluxo importado
+      // que os gestores vao conferir. Falhar o aviso nao desfaz a importacao,
+      // entao o sucesso continua sendo reportado.
+      const notice = notifyOnConfirm ? await notifyManagers() : null;
+      setMessage(`${parts.join(", ")}.${notice?.ok ? ` ${notice.message}` : ""}`);
+      if (notice && !notice.ok) setError(notice.message);
     } catch {
       setError("Falha de conexão ao confirmar o lote.");
     } finally {
@@ -127,6 +309,7 @@ export function ImportTab() {
             id="file"
             type="file"
             accept=".csv,.xlsx"
+            aria-label="Planilha de fluxo para importar"
             onChange={onFileChange}
           />
           <div className="button-row">
@@ -153,8 +336,177 @@ export function ImportTab() {
         </div>
       </section>
 
+      <section className="toolbar">
+        <button
+          className="button ghost"
+          type="button"
+          onClick={() => void notifyFromButton()}
+          disabled={notifying || confirming}
+          title="Avisa por WhatsApp os gestores ativos que têm conta atribuída e telefone cadastrado"
+        >
+          <Send size={16} />
+          {notifying ? "Notificando..." : "Notificar gestores"}
+        </button>
+        <span className="muted">
+          Avisa os gestores ativos que há fluxo para conferir. O telefone de cada gestor é
+          definido pelo coordenador, na aba Usuários.
+        </span>
+      </section>
+
+      <section className="section">
+        <div className="section-header">
+          <h2>Conversor de planilha bruta</h2>
+        </div>
+
+        <div className="panel pad form-grid">
+          <span className="muted">
+            Transforma o export bruto <strong>Visão Contas a Pagar</strong> do Conta Azul no
+            modelo <strong>FLUXO DE PAGAMENTOS JFX</strong>. O arquivo bruto não entra direto na
+            importação: os nomes das colunas não batem.
+          </span>
+
+          {rawFile ? <span className="muted import-file-name">{rawFile.name}</span> : null}
+
+          <input
+            ref={rawInputRef}
+            className="visually-hidden"
+            id="raw-file"
+            type="file"
+            accept=".csv,.xls,.xlsx"
+            aria-label="Planilha bruta do Conta Azul para converter"
+            onChange={onRawFileChange}
+          />
+
+          <div className="button-row">
+            <button
+              className="button"
+              type="button"
+              onClick={() => (rawFile ? void convertPreview() : rawInputRef.current?.click())}
+              disabled={converting}
+            >
+              <Wand2 size={16} />
+              {converting ? "Lendo..." : rawFile ? "Ler planilha bruta" : "Selecionar planilha bruta"}
+            </button>
+            {rawFile ? (
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => rawInputRef.current?.click()}
+                disabled={converting}
+              >
+                Trocar
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
       {error ? <div className="alert error">{error}</div> : null}
       {message ? <div className="alert success">{message}</div> : null}
+
+      {conversion?.missingColumns.length ? (
+        <div className="alert error">
+          Colunas obrigatórias não encontradas na planilha bruta:{" "}
+          {conversion.missingColumns.join(", ")}.
+        </div>
+      ) : null}
+
+      {conversion && !conversion.missingColumns.length ? (
+        <section className="section">
+          <div className="section-header">
+            <h2>Fluxo a gerar</h2>
+            <button
+              className="button success"
+              type="button"
+              onClick={() => void downloadFlow()}
+              disabled={conversion.validRows === 0 || downloading}
+            >
+              <Download size={16} />
+              {downloading ? "Gerando..." : "Gerar e baixar"}
+            </button>
+          </div>
+
+          <section className="stats-grid">
+            <div className="stat">
+              <span>Linhas</span>
+              <strong>{conversion.validRows}</strong>
+              <small>de {conversion.totalRows} lidas</small>
+            </div>
+            <div className="stat">
+              <span>Total</span>
+              <strong>{money(conversion.totalAmount)}</strong>
+              <small>soma das linhas</small>
+            </div>
+            <div className="stat">
+              <span>Ignoradas</span>
+              <strong>{conversion.invalidRows}</strong>
+              <small>fora do arquivo gerado</small>
+            </div>
+            <div className="stat">
+              <span>Arquivo</span>
+              <strong>
+                {conversion.flowDate ? shortDate(conversion.flowDate) : "-"}
+              </strong>
+              <small>{conversion.suggestedFileName}</small>
+            </div>
+          </section>
+
+          <div className="panel">
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Conta</th>
+                    <th>Situação</th>
+                    <th className="amount">Comprometido</th>
+                    <th className="amount">Valor do aporte</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {conversion.accounts.map((account) => (
+                    <tr key={account.accountLabel}>
+                      <td>{account.accountLabel}</td>
+                      <td>
+                        {account.isNewWork ? (
+                          <span className="status TRANSFERIDO">Conta nova</span>
+                        ) : (
+                          <span className="status APROVADO">Cadastrada</span>
+                        )}
+                      </td>
+                      <td className="amount">
+                        <Money value={account.computedAmount} />
+                      </td>
+                      <td className="amount">
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder="0,00"
+                          aria-label={`Valor do aporte para ${account.accountLabel}`}
+                          value={aportes[account.accountLabel] ?? ""}
+                          onChange={(event) =>
+                            setAportes({
+                              ...aportes,
+                              [account.accountLabel]: event.target.value,
+                            })
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <span className="muted">
+            O aporte informado vai para o bloco APORTES da planilha gerada. Conta sem valor não
+            entra no bloco.
+          </span>
+        </section>
+      ) : null}
 
       {preview?.missingColumns.length ? (
         <div className="alert error">
@@ -266,15 +618,26 @@ export function ImportTab() {
           <section className="section">
             <div className="section-header">
               <h2>Prévia do lote</h2>
-              <button
-                className="button success"
-                type="button"
-                onClick={confirmImport}
-                disabled={preview.validRows === 0 || confirming}
-              >
-                <CheckCircle2 size={16} />
-                {confirming ? "Confirmando..." : `Confirmar ${preview.validRows} linha(s)`}
-              </button>
+              <div className="button-row">
+                <label className="checkbox-line">
+                  <input
+                    type="checkbox"
+                    checked={notifyOnConfirm}
+                    onChange={(event) => setNotifyOnConfirm(event.target.checked)}
+                    disabled={confirming}
+                  />
+                  Notificar gestores
+                </label>
+                <button
+                  className="button success"
+                  type="button"
+                  onClick={confirmImport}
+                  disabled={preview.validRows === 0 || confirming}
+                >
+                  <CheckCircle2 size={16} />
+                  {confirming ? "Confirmando..." : `Confirmar ${preview.validRows} linha(s)`}
+                </button>
+              </div>
             </div>
 
             <div className="panel">
