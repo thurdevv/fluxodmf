@@ -2,8 +2,9 @@ import "dotenv/config";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { getDatabaseUrl } from "../src/lib/database-url";
 
-const databaseUrl = process.env.DATABASE_URL ?? "file:./prisma/dev.db";
+const databaseUrl = getDatabaseUrl();
 const dbPath = databaseUrl.replace(/^file:/, "");
 const absolutePath = path.resolve(process.cwd(), dbPath);
 
