@@ -39,14 +39,9 @@ async function upsertUser(input: {
   const passwordHash = await hash(input.password, 12);
   const user = await prisma.user.upsert({
     where: { username: input.username },
-    update: {
-      name: input.name,
-      email: input.email,
-      role: input.role,
-      status: input.status,
-      passwordHash,
-      phone: input.phone,
-    },
+    // O seed também roda quando o serviço inicia no Render. Não sobrescrever
+    // senha, perfil ou status de uma conta que já existe.
+    update: {},
     create: {
       name: input.name,
       username: input.username,
@@ -98,7 +93,7 @@ async function main() {
 
   console.log("Seed concluido.");
   console.log(`Obras/contas: ${works.map((work) => work.name).join(", ")}`);
-  console.log("Acesso inicial: jfx / jfx (Coordenador)");
+  console.log("Acesso inicial, se criado agora: jfx / jfx (Coordenador)");
 }
 
 main()

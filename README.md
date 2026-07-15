@@ -52,9 +52,10 @@ valer, e gere um `AUTH_SECRET` longo e aleatório — é ele que assina a sessã
 | Comando | O que faz |
 | --- | --- |
 | `npm run dev` | Sobe em modo desenvolvimento |
-| `npm run build` / `npm start` | Build e execução em produção (`build` gera o Prisma Client automaticamente) |
+| `npm run build` / `npm start` | Build e execução em produção (`build` gera o Prisma Client; `start` prepara o banco) |
 | `npm run lint` | ESLint |
 | `npm run db:init` | Cria as tabelas se não existirem |
+| `npm run db:setup` | Cria as tabelas e garante os dados iniciais |
 | `npm run db:seed` | Cria/atualiza o usuário inicial e as contas |
 | `npm run db:reset` | **Apaga** o banco e recria do zero |
 

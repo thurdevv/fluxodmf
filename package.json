@@ -8,10 +8,11 @@
     "postinstall": "npm run prisma:generate",
     "prebuild": "npm run prisma:generate",
     "build": "next build",
-    "start": "next start",
+    "start": "npm run db:setup && next start",
     "lint": "eslint .",
     "prisma:generate": "prisma generate",
     "db:init": "tsx scripts/init-db.ts",
+    "db:setup": "npm run db:init && npm run db:seed",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "tsx scripts/reset-db.ts"
