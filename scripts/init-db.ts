@@ -182,6 +182,18 @@ CREATE TABLE IF NOT EXISTS "AuditLog" (
   "createdAt" DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   CONSTRAINT "AuditLog_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS "MaintenanceNotice" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "active" BOOLEAN NOT NULL DEFAULT false,
+  "activatedById" TEXT,
+  "activatedByName" TEXT,
+  "activatedAt" DATETIME,
+  "updatedAt" DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+INSERT OR IGNORE INTO "MaintenanceNotice" ("id", "active", "updatedAt")
+VALUES ('singleton', false, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 `);
 
 db.close();

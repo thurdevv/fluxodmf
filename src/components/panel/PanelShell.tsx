@@ -16,6 +16,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
+import { MaintenanceBar } from "@/components/panel/MaintenanceBar";
 import { PanelContext, type PanelUser } from "@/components/panel/PanelContext";
 import { DashboardTab } from "@/components/panel/tabs/DashboardTab";
 import { ImportTab } from "@/components/panel/tabs/ImportTab";
@@ -24,7 +25,7 @@ import { PaymentsTab } from "@/components/panel/tabs/PaymentsTab";
 import { PermissionsTab } from "@/components/panel/tabs/PermissionsTab";
 import { ReconciliationTab } from "@/components/panel/tabs/ReconciliationTab";
 import { UsersTab } from "@/components/panel/tabs/UsersTab";
-import { roleLabels, TAB_IDS, type TabId } from "@/lib/permissions";
+import { Role, roleLabels, TAB_IDS, type TabId } from "@/lib/permissions";
 
 type MeResponse = {
   user: PanelUser;
@@ -190,6 +191,7 @@ export function PanelShell() {
 
   const current = tabDefinitions.find((tab) => tab.id === activeTab) ?? tabDefinitions[0];
   const ActiveComponent = current.Component;
+  const isCoordinator = user.role === Role.COORDENADOR;
 
   return (
     <PanelContext.Provider value={{ user, tabs, goToTab }}>
@@ -266,7 +268,12 @@ export function PanelShell() {
           </div>
         </aside>
 
-        <main className="main" id="conteudo-principal" tabIndex={-1}>
+        <main
+          className={clsx("main", isCoordinator && "has-banner")}
+          id="conteudo-principal"
+          tabIndex={-1}
+        >
+          {isCoordinator ? <MaintenanceBar /> : null}
           <header className="topbar">
             <div className="button-row">
               <button

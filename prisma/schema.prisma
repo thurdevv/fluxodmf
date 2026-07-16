@@ -240,3 +240,15 @@ model AuditLog {
   metadata  String   @default("{}")
   createdAt DateTime @default(now())
 }
+
+/// Aviso de manutencao do sistema. Linha unica (id fixo "singleton"): quem liga
+/// e quando ficam gravados para o painel exibir o coordenador que sinalizou a
+/// manutencao. So coordenadores leem/alteram este registro.
+model MaintenanceNotice {
+  id              String    @id @default("singleton")
+  active          Boolean   @default(false)
+  activatedById   String?
+  activatedByName String?
+  activatedAt     DateTime?
+  updatedAt       DateTime  @updatedAt
+}

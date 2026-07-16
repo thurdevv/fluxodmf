@@ -445,6 +445,122 @@ textarea:disabled {
   display: none;
 }
 
+/* Barra de manutencao (so coordenador). Fica acima do topbar, por isso .main
+   ganha uma terceira faixa no grid quando ela esta presente. */
+.main.has-banner {
+  grid-template-rows: auto auto 1fr;
+}
+
+.maintenance-bar {
+  position: sticky;
+  top: 0;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.maintenance-bar.on {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-bottom-color: var(--warning);
+}
+
+.maintenance-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.maintenance-bar.on .maintenance-icon {
+  background: rgba(180, 83, 9, 0.16);
+  color: var(--warning);
+}
+
+.maintenance-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.maintenance-text strong {
+  font-weight: 650;
+}
+
+.maintenance-error {
+  color: var(--danger);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.maintenance-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.maintenance-toggle:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.maintenance-toggle-track {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background 0.15s ease;
+}
+
+.maintenance-toggle.on .maintenance-toggle-track {
+  background: var(--warning);
+}
+
+.maintenance-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.maintenance-toggle.on .maintenance-toggle-thumb {
+  transform: translateX(16px);
+}
+
+.maintenance-toggle-label {
+  min-width: 46px;
+  text-align: left;
+}
+
 .page-title {
   display: grid;
   gap: 2px;
@@ -971,6 +1087,10 @@ textarea:disabled {
 
   .topbar {
     padding: 10px 14px;
+  }
+
+  .maintenance-bar {
+    padding: 8px 14px;
   }
 
   .content {
@@ -1536,6 +1656,10 @@ button,
 
   .topbar {
     padding: 10px 14px;
+  }
+
+  .maintenance-bar {
+    padding: 8px 14px;
   }
 
   .content {
