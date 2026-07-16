@@ -1,12 +1,14 @@
 import "dotenv/config";
 import { hash } from "bcryptjs";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../generated/prisma/client";
 import { Role, UserStatus } from "../generated/prisma/enums";
 import { getDatabaseUrl } from "../src/lib/database-url";
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: getDatabaseUrl() }),
+  adapter: new PrismaBetterSqlite3({
+    url: getDatabaseUrl(),
+  }),
 });
 
 async function upsertWork(name: string, slug: string, aliases: string[]) {

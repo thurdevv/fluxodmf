@@ -5,17 +5,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "postinstall": "npm run prisma:generate",
-    "prebuild": "npm run prisma:generate",
+    "postinstall": "npm run prisma:generate && npm run db:setup",
+    "prebuild": "npm run prisma:generate && npm run db:setup",
     "build": "next build",
     "start": "npm run db:setup && next start",
     "lint": "eslint .",
     "prisma:generate": "prisma generate",
-    "db:push": "prisma db push --skip-generate",
-    "db:setup": "npm run db:push && npm run db:seed",
+    "db:init": "tsx scripts/init-db.ts",
+    "db:setup": "npm run db:init && npm run db:seed",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset --skip-generate && npm run db:seed"
+    "db:reset": "tsx scripts/reset-db.ts"
   },
   "keywords": [
     "financeiro",
@@ -33,9 +33,10 @@
     "uuid": "^11.1.1"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/adapter-better-sqlite3": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.11.1",
     "clsx": "^2.1.1",
     "csv-parse": "^7.0.1",
     "dotenv": "^17.4.2",
@@ -44,14 +45,13 @@
     "lucide-react": "^1.23.0",
     "next": "^16.2.10",
     "pdf-lib": "^1.17.1",
-    "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^26.1.1",
-    "@types/pg": "^8.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.4",
