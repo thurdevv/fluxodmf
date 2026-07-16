@@ -26,13 +26,13 @@ comprometido.
 
 ## Como rodar
 
-Requer Node 20+ (desenvolvido no 24) e npm.
+Requer Node 20+ (desenvolvido no 24), npm e um PostgreSQL acessível.
 
 ```bash
 npm install
-cp .env.example .env        # ajuste AUTH_SECRET
+cp .env.example .env        # ajuste DATABASE_URL e AUTH_SECRET
 npm run prisma:generate     # gera o client do Prisma
-npm run db:init             # cria as tabelas do SQLite
+npm run db:push             # cria/atualiza as tabelas no Postgres
 npm run db:seed             # cria o usuário inicial e as contas
 npm run dev
 ```
@@ -54,10 +54,10 @@ valer, e gere um `AUTH_SECRET` longo e aleatório — é ele que assina a sessã
 | `npm run dev` | Sobe em modo desenvolvimento |
 | `npm install` / `npm run build` / `npm start` | Instalação, build e execução garantem Prisma Client, tabelas e dados iniciais |
 | `npm run lint` | ESLint |
-| `npm run db:init` | Cria as tabelas se não existirem |
-| `npm run db:setup` | Cria as tabelas e garante os dados iniciais |
+| `npm run db:push` | Sincroniza as tabelas do Postgres com o schema |
+| `npm run db:setup` | Sincroniza as tabelas e garante os dados iniciais |
 | `npm run db:seed` | Cria/atualiza o usuário inicial e as contas |
-| `npm run db:reset` | **Apaga** o banco e recria do zero |
+| `npm run db:reset` | **Apaga** os dados e recria as tabelas do zero |
 
 ## Perfis e acesso
 
@@ -191,18 +191,15 @@ src/
 prisma/
   schema.prisma
   seed.ts
-scripts/
-  init-db.ts        cria as tabelas
-  reset-db.ts       apaga e recria o banco
 ```
 
-Stack: Next 16 (App Router), React 19, TypeScript, Prisma 7 com SQLite
-(`better-sqlite3`), Zod para validação, `jose` para a sessão JWT, `bcryptjs`
+Stack: Next 16 (App Router), React 19, TypeScript, Prisma 7 com PostgreSQL
+(`@prisma/adapter-pg`), Zod para validação, `jose` para a sessão JWT, `bcryptjs`
 para as senhas, ExcelJS e `csv-parse` para a importação.
 
 ## Dados e privacidade
 
-O `.gitignore` mantém fora do versionamento o `.env`, o banco (`prisma/dev.db`) e
+O `.gitignore` mantém fora do versionamento o `.env` e
 as planilhas (`*.xlsx`, `*.xls`) — elas contêm nomes de fornecedores e
 funcionários e valores reais. Use `samples/conta-azul-exemplo.csv` como
 referência de formato.
