@@ -206,8 +206,8 @@ export function UsersTab() {
 
   return (
     <>
-      {error ? <div className="alert error">{error}</div> : null}
-      {message ? <div className="alert success">{message}</div> : null}
+      {error ? <div className="alert error" role="alert">{error}</div> : null}
+      {message ? <div className="alert success" role="status">{message}</div> : null}
 
       <section className="section">
         <div className="section-header">
@@ -467,9 +467,14 @@ export function UsersTab() {
       </section>
 
       {editing && editForm ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-user-title"
+        >
           <form className="modal" onSubmit={saveEdit}>
-            <h2>Editar usuário</h2>
+            <h2 id="edit-user-title">Editar usuário</h2>
             <p>{editing.username}</p>
 
             <div className="field">
@@ -608,9 +613,14 @@ export function UsersTab() {
       ) : null}
 
       {confirmDelete ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-user-title"
+        >
           <div className="modal">
-            <h2>Excluir usuário</h2>
+            <h2 id="delete-user-title">Excluir usuário</h2>
             <p>
               Excluir <strong>{confirmDelete.name}</strong> ({confirmDelete.username})? Se a
               conta tiver histórico no sistema, ela será desativada em vez de removida.

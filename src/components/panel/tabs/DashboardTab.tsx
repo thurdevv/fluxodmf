@@ -1,8 +1,10 @@
 "use client";
 
+import { ArrowRight, CheckCircle2, FileSpreadsheet, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Money } from "@/components/Money";
 import { StatusBadge } from "@/components/StatusBadge";
+import { usePanel } from "@/components/panel/PanelContext";
 import { money, shortDate, statusLabels } from "@/lib/format";
 
 type StatusKey = keyof typeof statusLabels;
@@ -57,6 +59,7 @@ function daysLate(dueDate: string, referenceDate: string) {
 }
 
 export function DashboardTab() {
+  const { goToTab } = usePanel();
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -79,13 +82,54 @@ export function DashboardTab() {
     };
   }, []);
 
-  if (loading) return <div className="panel pad">Carregando métricas...</div>;
-  if (error) return <div className="alert error">{error}</div>;
+  if (loading) {
+    return (
+      <div className="panel pad loading-card" role="status">
+        <span className="loading-dot" aria-hidden="true" />
+        Carregando métricas...
+      </div>
+    );
+  }
+  if (error) return <div className="alert error" role="alert">{error}</div>;
   if (!data) return null;
 
   const { totals } = data;
   const balance = Number((totals.contribution - totals.openAmount).toFixed(2));
   const maxCategory = data.byCategory[0]?.amount ?? 0;
+
+  if (totals.count === 0) {
+    return (
+      <section className="onboarding-card" aria-labelledby="onboarding-title">
+        <div className="onboarding-copy">
+          <span className="eyebrow">PRIMEIRO FLUXO</span>
+          <h2 id="onboarding-title">Comece o ciclo financeiro do dia</h2>
+          <p>
+            Importe a planilha para calcular a cobertura por conta e liberar a conferência e a
+            aprovação dos pagamentos.
+          </p>
+          <button className="button" type="button" onClick={() => goToTab("importar")}>
+            Importar planilha
+            <ArrowRight size={16} />
+          </button>
+        </div>
+
+        <ol className="journey-list" aria-label="Etapas do fluxo de pagamentos">
+          <li>
+            <span><FileSpreadsheet size={18} /></span>
+            <div><strong>1. Importe e valide</strong><small>Confira linhas, contas e aportes.</small></div>
+          </li>
+          <li>
+            <span><CheckCircle2 size={18} /></span>
+            <div><strong>2. Aprove o fluxo</strong><small>Decida individualmente ou em lote.</small></div>
+          </li>
+          <li>
+            <span><ShieldCheck size={18} /></span>
+            <div><strong>3. Feche e audite</strong><small>Gere o relatório com todo o histórico.</small></div>
+          </li>
+        </ol>
+      </section>
+    );
+  }
 
   return (
     <>

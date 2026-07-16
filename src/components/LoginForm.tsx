@@ -159,7 +159,7 @@ export function LoginForm() {
           />
         </div>
 
-        {error ? <div className="alert error">{error}</div> : null}
+        {error ? <div className="alert error" role="alert">{error}</div> : null}
 
         <button className="button" type="submit" disabled={loading}>
           <UserPlus size={16} />
@@ -207,8 +207,8 @@ export function LoginForm() {
         />
       </div>
 
-      {error ? <div className="alert error">{error}</div> : null}
-      {success ? <div className="alert success">{success}</div> : null}
+      {error ? <div className="alert error" role="alert">{error}</div> : null}
+      {success ? <div className="alert success" role="status">{success}</div> : null}
 
       <button className="button" type="submit" disabled={loading}>
         <LogIn size={16} />

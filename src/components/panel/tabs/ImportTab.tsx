@@ -225,13 +225,25 @@ export function ImportTab() {
   return (
     <>
       <section className="import-center" aria-label="Importar arquivo de pagamentos">
-        <div className="import-box">
-          <FileSpreadsheet size={38} aria-hidden="true" />
-          <strong>Envie o arquivo CSV ou XLSX</strong>
-          <span className="muted">
-            Colunas: fornecedor, data, descrição, valor, categoria e centro de custo.
-          </span>
-          <div className="field" style={{ width: "min(100%, 420px)" }}>
+        <div className="import-workspace">
+          <ol className="process-steps" aria-label="Etapas da importação">
+            <li className="active"><span>1</span><strong>Selecionar</strong><small>CSV ou XLSX</small></li>
+            <li><span>2</span><strong>Validar</strong><small>Linhas e aportes</small></li>
+            <li><span>3</span><strong>Confirmar</strong><small>Criar o fluxo</small></li>
+          </ol>
+
+          <div className="import-box">
+            <span className="import-icon" aria-hidden="true">
+              <FileSpreadsheet size={30} />
+            </span>
+            <div className="import-copy">
+              <span className="eyebrow">PASSO 1 DE 3</span>
+              <strong>Selecione a planilha do dia</strong>
+              <span className="muted">
+                CSV ou XLSX com fornecedor, data, descrição, valor e centro de custo.
+              </span>
+            </div>
+            <div className="field import-name-field">
             <label htmlFor="import-name">Nome do fluxo</label>
             <input
               className="input"
@@ -247,52 +259,61 @@ export function ImportTab() {
               maxLength={120}
             />
             <small className="muted">Opcional. Em branco, o sistema usa o nome sugerido.</small>
-          </div>
-          {file ? <span className="muted import-file-name">{file.name}</span> : null}
-          <input
-            ref={fileInputRef}
-            className="visually-hidden"
-            id="file"
-            type="file"
-            accept=".csv,.xlsx"
-            aria-label="Planilha de fluxo para importar"
-            onChange={onFileChange}
-          />
-          <div className="button-row">
-            <button
-              className="button"
-              type="button"
-              onClick={() => (file ? void previewFile() : fileInputRef.current?.click())}
-              disabled={loading}
-            >
-              <Upload size={16} />
-              {loading ? "Lendo..." : file ? "Gerar prévia" : "Selecionar arquivo"}
-            </button>
-            {file ? (
+            </div>
+            {file ? <span className="selected-file import-file-name">{file.name}</span> : null}
+            <input
+              ref={fileInputRef}
+              className="visually-hidden"
+              id="file"
+              type="file"
+              accept=".csv,.xlsx"
+              aria-label="Planilha de fluxo para importar"
+              onChange={onFileChange}
+            />
+            <div className="button-row import-actions">
               <button
-                className="button secondary"
+                className="button"
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => (file ? void previewFile() : fileInputRef.current?.click())}
                 disabled={loading}
               >
-                Trocar
+                <Upload size={16} />
+                {loading ? "Lendo..." : file ? "Gerar prévia" : "Selecionar arquivo"}
               </button>
-            ) : null}
+              {file ? (
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loading}
+                >
+                  Trocar arquivo
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="section">
-        <div className="section-header">
-          <h2>Conversor de planilha bruta</h2>
-        </div>
+      <details className="secondary-tool panel">
+        <summary>
+          <span className="secondary-tool-icon" aria-hidden="true"><Wand2 size={18} /></span>
+          <span>
+            <strong>Precisa converter o arquivo bruto do Conta Azul?</strong>
+            <small>Abra a ferramenta auxiliar para gerar uma planilha compatível.</small>
+          </span>
+          <span className="secondary-tool-action">
+            <span className="when-closed">Abrir</span>
+            <span className="when-open">Fechar</span>
+          </span>
+        </summary>
 
-        <div className="panel pad form-grid">
-          <span className="muted">
+        <div className="secondary-tool-content form-grid">
+          <p className="muted">
             Transforma o export bruto <strong>Visão Contas a Pagar</strong> do Conta Azul no
             modelo <strong>FLUXO DE PAGAMENTOS JFX</strong>. O arquivo bruto não entra direto na
             importação: os nomes das colunas não batem.
-          </span>
+          </p>
 
           {rawFile ? <span className="muted import-file-name">{rawFile.name}</span> : null}
 
@@ -328,13 +349,13 @@ export function ImportTab() {
             ) : null}
           </div>
         </div>
-      </section>
+      </details>
 
-      {error ? <div className="alert error">{error}</div> : null}
-      {message ? <div className="alert success">{message}</div> : null}
+      {error ? <div className="alert error" role="alert">{error}</div> : null}
+      {message ? <div className="alert success" role="status">{message}</div> : null}
 
       {conversion?.missingColumns.length ? (
-        <div className="alert error">
+        <div className="alert error" role="alert">
           Colunas obrigatórias não encontradas na planilha bruta:{" "}
           {conversion.missingColumns.join(", ")}.
         </div>
@@ -438,7 +459,7 @@ export function ImportTab() {
       ) : null}
 
       {preview?.missingColumns.length ? (
-        <div className="alert error">
+        <div className="alert error" role="alert">
           Colunas obrigatórias não encontradas: {preview.missingColumns.join(", ")}.
         </div>
       ) : null}
@@ -486,7 +507,7 @@ export function ImportTab() {
           </section>
 
           {divergences?.length ? (
-            <div className="alert error">
+            <div className="alert error" role="alert">
               <strong>
                 <AlertTriangle size={14} /> Resumo da planilha não bate com a soma das linhas
               </strong>

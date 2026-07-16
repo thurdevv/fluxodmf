@@ -139,8 +139,9 @@ export function ReconciliationTab() {
           </span>
 
           <div className="split-grid">
-            {slots.map((slot) => (
+            {slots.map((slot, index) => (
               <div className="file-box" key={slot.inputId}>
+                <span className="file-step" aria-hidden="true">{index + 1}</span>
                 <strong>
                   <FileSpreadsheet size={16} /> {slot.label}
                 </strong>
@@ -197,7 +198,7 @@ export function ReconciliationTab() {
         </div>
       </section>
 
-      {error ? <div className="alert error">{error}</div> : null}
+      {error ? <div className="alert error" role="alert">{error}</div> : null}
 
       {result ? (
         <>

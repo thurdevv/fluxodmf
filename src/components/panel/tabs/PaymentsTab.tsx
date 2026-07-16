@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   FileDown,
+  FileSpreadsheet,
   ListChecks,
   LockKeyhole,
   Play,
@@ -129,7 +130,7 @@ const batchActionLabels: Record<BatchAction, string> = {
 type BatchResult = { done: number; failed: { supplier: string; error: string }[] };
 
 export function PaymentsTab() {
-  const { user } = usePanel();
+  const { user, goToTab } = usePanel();
   const isCoordinator = canAdminister(user.role);
 
   const [selectedId, setSelectedId] = useState("");
@@ -356,6 +357,25 @@ export function PaymentsTab() {
     void runAction(mode, { reason });
   }
 
+  if (!flowsLoading && flowData && flowData.flows.length === 0) {
+    return (
+      <section className="empty-state panel" aria-labelledby="payments-empty-title">
+        <span className="empty-state-icon" aria-hidden="true">
+          <FileSpreadsheet size={24} />
+        </span>
+        <span className="eyebrow">NENHUM FLUXO CRIADO</span>
+        <h2 id="payments-empty-title">Os pagamentos começam pela importação</h2>
+        <p>
+          Envie a planilha do dia para validar os lançamentos e criar a sessão de aprovação.
+          Depois disso, as decisões individuais e em lote aparecerão aqui.
+        </p>
+        <button className="button" type="button" onClick={() => goToTab("importar")}>
+          Ir para importação
+        </button>
+      </section>
+    );
+  }
+
   return (
     <>
       {selectedFlow ? (
@@ -563,9 +583,9 @@ export function PaymentsTab() {
         ) : null}
       </section>
 
-      {flowError ? <div className="alert error">{flowError}</div> : null}
-      {error ? <div className="alert error">{error}</div> : null}
-      {message ? <div className="alert success">{message}</div> : null}
+      {flowError ? <div className="alert error" role="alert">{flowError}</div> : null}
+      {error ? <div className="alert error" role="alert">{error}</div> : null}
+      {message ? <div className="alert success" role="status">{message}</div> : null}
 
       <section className="split-grid">
         <div className="section">
@@ -736,9 +756,14 @@ export function PaymentsTab() {
       </section>
 
       {mode ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="payment-action-title"
+        >
           <form className="modal" onSubmit={onSubmitModal}>
-            <h2>{modeLabels[mode]}</h2>
+            <h2 id="payment-action-title">{modeLabels[mode]}</h2>
             <p>{selected?.supplierName}</p>
 
             {mode === "transfer" ? (
@@ -788,9 +813,14 @@ export function PaymentsTab() {
       ) : null}
 
       {batchOpen ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="batch-action-title"
+        >
           <form className="modal" onSubmit={runBatch}>
-            <h2>Ações em lote</h2>
+            <h2 id="batch-action-title">Ações em lote</h2>
             <p>
               {batchPayments.length} pagamento(s) selecionado(s) · {money(batchTotal)}
             </p>
@@ -877,7 +907,12 @@ export function PaymentsTab() {
       ) : null}
 
       {flowReopenOpen ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reopen-flow-title"
+        >
           <form
             className="modal"
             onSubmit={(event) => {
@@ -885,7 +920,7 @@ export function PaymentsTab() {
               void changeFlow("reopen", flowReason);
             }}
           >
-            <h2>Reabrir fechamento</h2>
+            <h2 id="reopen-flow-title">Reabrir fechamento</h2>
             <p>{selectedFlow?.name}</p>
             <div className="field">
               <label htmlFor="flow-reopen-reason">Motivo da reabertura</label>

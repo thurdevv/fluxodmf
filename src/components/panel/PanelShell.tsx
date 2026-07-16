@@ -194,6 +194,17 @@ export function PanelShell() {
   return (
     <PanelContext.Provider value={{ user, tabs, goToTab }}>
       <div className="app-shell">
+        <a className="skip-link" href="#conteudo-principal">
+          Ir para o conteúdo
+        </a>
+        {menuOpen ? (
+          <button
+            className="sidebar-backdrop"
+            type="button"
+            aria-label="Fechar menu"
+            onClick={() => setMenuOpen(false)}
+          />
+        ) : null}
         <aside className={clsx("sidebar", menuOpen && "open")}>
           <div className="sidebar-header">
             <BrandMark />
@@ -205,6 +216,7 @@ export function PanelShell() {
               className="icon-button mobile-menu"
               type="button"
               title="Fechar menu"
+              aria-label="Fechar menu"
               onClick={() => setMenuOpen(false)}
             >
               <X size={18} />
@@ -254,13 +266,14 @@ export function PanelShell() {
           </div>
         </aside>
 
-        <main className="main">
+        <main className="main" id="conteudo-principal" tabIndex={-1}>
           <header className="topbar">
             <div className="button-row">
               <button
                 className="icon-button mobile-menu"
                 type="button"
                 title="Abrir menu"
+                aria-label="Abrir menu"
                 onClick={() => setMenuOpen(true)}
               >
                 <Menu size={18} />
@@ -269,6 +282,20 @@ export function PanelShell() {
                 <h1>{current.title}</h1>
                 <p>{current.subtitle}</p>
               </div>
+            </div>
+            <div className="topbar-user" aria-label={`Usuário: ${user.name}`}>
+              <span className="user-avatar" aria-hidden="true">
+                {user.name
+                  .split(" ")
+                  .slice(0, 2)
+                  .map((part) => part[0])
+                  .join("")
+                  .toUpperCase()}
+              </span>
+              <span>
+                <strong>{user.name}</strong>
+                <small>{roleLabels[user.role]}</small>
+              </span>
             </div>
           </header>
           <div className="content">

@@ -9,7 +9,12 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "DJ Fluxo | Fluxo de pagamentos",
-  description: "Painel de administração do fluxo de pagamentos",
+  description: "Painel interno para importar, aprovar e auditar o fluxo de pagamentos.",
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+  },
 };
 
 export default function RootLayout({

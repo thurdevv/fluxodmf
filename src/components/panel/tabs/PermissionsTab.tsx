@@ -73,8 +73,8 @@ export function PermissionsTab() {
 
   return (
     <>
-      {error ? <div className="alert error">{error}</div> : null}
-      {message ? <div className="alert success">{message}</div> : null}
+      {error ? <div className="alert error" role="alert">{error}</div> : null}
+      {message ? <div className="alert success" role="status">{message}</div> : null}
 
       <section className="section">
         <div className="section-header">

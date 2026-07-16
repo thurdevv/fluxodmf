@@ -100,7 +100,7 @@ export function LogsTab() {
 
   return (
     <>
-      {error ? <div className="alert error">{error}</div> : null}
+      {error ? <div className="alert error" role="alert">{error}</div> : null}
 
       <section className="toolbar">
         <select
