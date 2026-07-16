@@ -50,6 +50,28 @@ const internalColumns = {
 const PURCHASE_TYPE = "compra";
 
 /**
+ * Status de transacao da CAJU em que a compra NAO virou despesa: foi estornada,
+ * cancelada, negada ou recusada, entao o valor voltou e nao existe nota fiscal
+ * a cobrar. Ate aqui a conciliacao olhava so o tipo ("Compra") e ignorava o
+ * status, contando cada estorno como uma compra — nos dados reais isso jogava
+ * dezenas de estornos na lista de pendentes e mandava cobrar nota de gasto que
+ * nunca se concretizou. Assim como os tipos que nao sao compra, esses lancamentos
+ * nao somem: vao para o relatorio de ignorados, agrupados pelo status.
+ */
+const NON_EXPENSE_STATUSES = new Set([
+  "estornada",
+  "estornado",
+  "cancelada",
+  "cancelado",
+  "negada",
+  "negado",
+  "recusada",
+  "recusado",
+  "reprovada",
+  "reprovado",
+]);
+
+/**
  * Janela para casar uma compra com o lancamento interno. O lancamento e feito
  * a mao dias depois (nos dados reais houve diferenca de ate uma semana), entao
  * a data sozinha nao identifica nada — quem identifica e o valor exato, em
@@ -369,16 +391,26 @@ export function reconcile(input: {
   // Tudo que nao e compra sai aqui, agrupado, para nada ser descartado em
   // silencio: o usuario ve o que ficou de fora e por que.
   const ignoredMap = new Map<string, IgnoredGroup>();
+  const addIgnored = (label: string, amount: number) => {
+    const current = ignoredMap.get(label) ?? { type: label, count: 0, amount: 0 };
+    current.count += 1;
+    current.amount = Number((current.amount + amount).toFixed(2));
+    ignoredMap.set(label, current);
+  };
+
   const purchases: CajuTransaction[] = [];
   let cajuOutOfRange = 0;
 
   for (const row of input.caju) {
     if (normalizeName(row.type) !== PURCHASE_TYPE) {
-      const label = row.type || "(sem tipo)";
-      const current = ignoredMap.get(label) ?? { type: label, count: 0, amount: 0 };
-      current.count += 1;
-      current.amount = Number((current.amount + row.amount).toFixed(2));
-      ignoredMap.set(label, current);
+      addIgnored(row.type || "(sem tipo)", row.amount);
+      continue;
+    }
+    // Compra estornada/cancelada/negada: o valor voltou ao cartao, entao nao ha
+    // nota a cobrar. Sem esta trava, cada estorno virava uma nota pendente
+    // fantasma (foi o que inflou o resultado de 2 para 38).
+    if (NON_EXPENSE_STATUSES.has(normalizeName(row.transactionStatus))) {
+      addIgnored(`Compra ${row.transactionStatus || "sem status"}`, row.amount);
       continue;
     }
     if (!inRange(row.date)) {
