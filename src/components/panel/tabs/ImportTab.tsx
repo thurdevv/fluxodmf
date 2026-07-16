@@ -14,6 +14,18 @@ import { money, shortDate } from "@/lib/format";
 import type { FlowConversion } from "@/lib/flow-converter";
 import type { ImportPreview } from "@/types";
 
+/** Nome do arquivo refinado: o que o usuário digitou (garantindo a extensão
+ *  .xlsx) ou, em branco, o nome sugerido a partir da data do fluxo. */
+function refinedFileName(chosen: string, fallback: string) {
+  const name = chosen
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!name) return fallback;
+  return /\.xlsx$/i.test(name) ? name : `${name}.xlsx`;
+}
+
 type ConfirmResponse = {
   flowName?: string;
   importedRows?: number;
@@ -30,12 +42,12 @@ export function ImportTab() {
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [importName, setImportName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Conversor do export bruto do Conta Azul.
   const [rawFile, setRawFile] = useState<File | null>(null);
   const [conversion, setConversion] = useState<FlowConversion | null>(null);
+  const [refinedName, setRefinedName] = useState("");
   const [aportes, setAportes] = useState<Record<string, string>>({});
   const [converting, setConverting] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -154,15 +166,16 @@ export function ImportTab() {
       }
 
       const blob = await response.blob();
+      const downloadName = refinedFileName(refinedName, conversion.suggestedFileName);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = conversion.suggestedFileName;
+      anchor.download = downloadName;
       anchor.click();
       URL.revokeObjectURL(url);
 
       setMessage(
-        `${conversion.suggestedFileName} gerado. Envie esse arquivo no campo de importação acima.`,
+        `${downloadName} gerado. Envie esse arquivo no campo de importação acima.`,
       );
     } catch {
       setError("Falha de conexão ao gerar a planilha de fluxo.");
@@ -184,7 +197,6 @@ export function ImportTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: preview.fileName,
-          importName,
           totalRows: preview.totalRows,
           rows: preview.rows,
           contributions: preview.contributions,
@@ -207,7 +219,6 @@ export function ImportTab() {
 
       setPreview(null);
       setFile(null);
-      setImportName("");
       if (fileInputRef.current) fileInputRef.current.value = "";
 
       setMessage(`${data.flowName ? `${data.flowName}: ` : ""}${parts.join(", ")}.`);
@@ -242,23 +253,6 @@ export function ImportTab() {
               <span className="muted">
                 CSV ou XLSX com fornecedor, data, descrição, valor e centro de custo.
               </span>
-            </div>
-            <div className="field import-name-field">
-            <label htmlFor="import-name">Nome do fluxo</label>
-            <input
-              className="input"
-              id="import-name"
-              value={importName}
-              onChange={(event) => setImportName(event.target.value)}
-              placeholder={`FLUXO DE PAGAMENTOS ${new Intl.DateTimeFormat("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-              })
-                .format(new Date())
-                .replace("/", ".")}`}
-              maxLength={120}
-            />
-            <small className="muted">Opcional. Em branco, o sistema usa o nome sugerido.</small>
             </div>
             {file ? <span className="selected-file import-file-name">{file.name}</span> : null}
             <input
@@ -314,6 +308,21 @@ export function ImportTab() {
             modelo <strong>FLUXO DE PAGAMENTOS JFX</strong>. O arquivo bruto não entra direto na
             importação: os nomes das colunas não batem.
           </p>
+
+          <div className="field import-name-field">
+            <label htmlFor="refined-name">Nome do fluxo</label>
+            <input
+              className="input"
+              id="refined-name"
+              value={refinedName}
+              onChange={(event) => setRefinedName(event.target.value)}
+              placeholder={conversion?.suggestedFileName ?? "FLUXO DE PAGAMENTOS JFX DIA dd.mm.aaaa"}
+              maxLength={120}
+            />
+            <small className="muted">
+              Vira o nome da planilha refinada gerada. Em branco, usa a data do fluxo.
+            </small>
+          </div>
 
           {rawFile ? <span className="muted import-file-name">{rawFile.name}</span> : null}
 
