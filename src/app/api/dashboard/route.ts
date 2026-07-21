@@ -41,7 +41,7 @@ export async function GET() {
 
     const statuses = Object.values(PaymentStatus);
 
-    const [statusGroups, works, byWorkGroups, byCategoryGroups, contributionGroups] =
+    const [statusGroups, works, accountPayments, byCategoryGroups, contributionGroups] =
       await Promise.all([
         prisma.payment.groupBy({
           by: ["status"],
@@ -49,10 +49,14 @@ export async function GET() {
           _sum: { amount: true },
         }),
         prisma.work.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-        prisma.payment.groupBy({
-          by: ["workId", "status"],
-          _count: { _all: true },
-          _sum: { amount: true },
+        prisma.payment.findMany({
+          select: {
+            id: true,
+            workId: true,
+            status: true,
+            amount: true,
+            allocations: { select: { workId: true, amount: true } },
+          },
         }),
         prisma.payment.groupBy({
           by: ["category"],
@@ -79,13 +83,24 @@ export async function GET() {
      * cobrir os pagamentos em aberto. Saldo negativo = aporte insuficiente.
      */
     const byAccount = works.map((work) => {
-      const rows = byWorkGroups.filter((row) => row.workId === work.id);
+      const rows = accountPayments.flatMap((payment) => {
+        const allocations = payment.allocations.length
+          ? payment.allocations
+          : [{ workId: payment.workId, amount: payment.amount }];
+        return allocations
+          .filter((allocation) => allocation.workId === work.id)
+          .map((allocation) => ({
+            paymentId: payment.id,
+            status: payment.status,
+            amount: numberValue(allocation.amount),
+          }));
+      });
       const open = rows.filter((row) => COMMITTED_STATUSES.includes(row.status));
       const openAmount = round(
-        open.reduce((sum, row) => sum + numberValue(row._sum.amount), 0),
+        open.reduce((sum, row) => sum + row.amount, 0),
       );
       const totalAmount = round(
-        rows.reduce((sum, row) => sum + numberValue(row._sum.amount), 0),
+        rows.reduce((sum, row) => sum + row.amount, 0),
       );
       const contribution = round(
         numberValue(
@@ -96,7 +111,7 @@ export async function GET() {
       return {
         workId: work.id,
         name: work.name,
-        count: rows.reduce((sum, row) => sum + row._count._all, 0),
+        count: new Set(rows.map((row) => row.paymentId)).size,
         totalAmount,
         openAmount,
         contribution,
@@ -104,7 +119,9 @@ export async function GET() {
         coverage: openAmount > 0 ? round((contribution / openAmount) * 100) : null,
         statuses: statuses.map((status) => ({
           status,
-          count: rows.find((row) => row.status === status)?._count._all ?? 0,
+          count: new Set(
+            rows.filter((row) => row.status === status).map((row) => row.paymentId),
+          ).size,
         })),
       };
     });

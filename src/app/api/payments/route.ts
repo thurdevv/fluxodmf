@@ -53,6 +53,13 @@ export async function GET(request: Request) {
         include: {
           work: true,
           importBatch: true,
+          tags: { include: { tag: true } },
+          allocations: { include: { work: true } },
+          approvals: {
+            orderBy: { createdAt: "asc" },
+            include: { actor: { select: { id: true, name: true, role: true } } },
+          },
+          appliedApprovalRule: true,
           actions: {
             orderBy: { createdAt: "desc" },
             include: { actor: true },

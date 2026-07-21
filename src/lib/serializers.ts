@@ -15,6 +15,16 @@ type PaymentRecord = Record<string, unknown> & {
   createdAt: Date;
   updatedAt: Date;
   actions?: ActionRecord[];
+  receiptReceivedAt?: Date | null;
+  approvals?: Array<Record<string, unknown> & { createdAt: Date }>;
+  allocations?: Array<Record<string, unknown> & {
+    percentage: DecimalLike | number | string;
+    amount: DecimalLike | number | string;
+  }>;
+  appliedApprovalRule?: (Record<string, unknown> & {
+    minAmount: DecimalLike | number | string;
+    maxAmount?: DecimalLike | number | string | null;
+  }) | null;
 };
 
 function decimalToNumber(value: DecimalLike | number | string) {
@@ -32,11 +42,32 @@ export function serializePayment(payment: PaymentRecord) {
     currentDueDate: payment.currentDueDate.toISOString(),
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
+    receiptReceivedAt: payment.receiptReceivedAt?.toISOString() ?? null,
     actions: payment.actions?.map((action) => ({
       ...action,
       createdAt: action.createdAt.toISOString(),
       newDueDate: action.newDueDate?.toISOString() ?? null,
     })),
+    approvals: payment.approvals?.map((approval) => ({
+      ...approval,
+      createdAt: approval.createdAt.toISOString(),
+    })),
+    allocations: payment.allocations?.map((allocation) => ({
+      ...allocation,
+      percentage: decimalToNumber(allocation.percentage),
+      amount: decimalToNumber(allocation.amount),
+    })),
+    appliedApprovalRule: payment.appliedApprovalRule
+      ? {
+          ...payment.appliedApprovalRule,
+          minAmount: decimalToNumber(payment.appliedApprovalRule.minAmount),
+          maxAmount:
+            payment.appliedApprovalRule.maxAmount === null ||
+            payment.appliedApprovalRule.maxAmount === undefined
+              ? null
+              : decimalToNumber(payment.appliedApprovalRule.maxAmount),
+        }
+      : null,
   };
 }
 

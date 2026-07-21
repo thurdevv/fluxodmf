@@ -64,6 +64,26 @@ enum DailyFlowEventType {
   REABERTO
 }
 
+enum StandardReasonAction {
+  REPROVAR
+  TRANSFERIR
+  CANCELAR
+  SOLICITAR_INFO
+  REABRIR
+}
+
+enum AdvanceStatus {
+  ABERTO
+  PRESTADO
+  FECHADO
+  CANCELADO
+}
+
+enum AllocationSource {
+  MANUAL
+  REGRA
+}
+
 model User {
   id            String            @id @default(cuid())
   name          String
@@ -85,6 +105,8 @@ model User {
   flowsStarted  DailyFlow[]       @relation("DailyFlowStartedBy")
   flowsClosed   DailyFlow[]       @relation("DailyFlowClosedBy")
   flowEvents    DailyFlowEvent[]  @relation("DailyFlowEventActor")
+  approvals     PaymentApproval[]
+  advances      Advance[]         @relation("AdvanceCreatedBy")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -100,6 +122,10 @@ model Work {
   users             UserWork[]
   payments          Payment[]
   contributions     Contribution[]
+  approvalRules     ApprovalRule[]
+  allocationSplits  AllocationRuleSplit[]
+  paymentAllocations PaymentAllocation[]
+  advances          Advance[]
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 }
@@ -163,12 +189,160 @@ model Payment {
   createdBy         User            @relation("PaymentCreatedBy", fields: [createdById], references: [id])
   actions           PaymentAction[]
   attachments       Attachment[]
+  approvals         PaymentApproval[]
+  tags              PaymentTag[]
+  allocations       PaymentAllocation[]
+  hasReceipt        Boolean         @default(false)
+  receiptReceivedAt DateTime?
+  appliedApprovalRuleId String?
+  appliedApprovalRule ApprovalRule? @relation(fields: [appliedApprovalRuleId], references: [id], onDelete: SetNull)
+  requiredApprovals  Int             @default(1)
+  requiredApprovalRole Role          @default(GESTOR)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
   @@index([status])
   @@index([workId])
   @@index([currentDueDate])
+}
+
+model ApprovalRule {
+  id                  String    @id @default(cuid())
+  name                String
+  minAmount           Decimal   @default(0)
+  maxAmount           Decimal?
+  workId              String?
+  work                Work?     @relation(fields: [workId], references: [id], onDelete: SetNull)
+  category            String?
+  tagId               String?
+  tag                 Tag?      @relation(fields: [tagId], references: [id], onDelete: SetNull)
+  requiredRole        Role      @default(GESTOR)
+  requiredApprovals   Int       @default(1)
+  preventSelfApproval Boolean   @default(true)
+  priority            Int       @default(0)
+  active              Boolean   @default(true)
+  payments            Payment[]
+  approvals           PaymentApproval[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([active, priority])
+  @@index([workId])
+  @@index([tagId])
+}
+
+model PaymentApproval {
+  id             String       @id @default(cuid())
+  paymentId      String
+  payment        Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  actorId        String
+  actor          User         @relation(fields: [actorId], references: [id])
+  approvalRuleId String?
+  approvalRule   ApprovalRule? @relation(fields: [approvalRuleId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+
+  @@unique([paymentId, actorId])
+  @@index([paymentId, createdAt])
+}
+
+model Tag {
+  id        String         @id @default(cuid())
+  name      String         @unique
+  color     String         @default("#3157A4")
+  active    Boolean        @default(true)
+  payments  PaymentTag[]
+  rules     ApprovalRule[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model PaymentTag {
+  paymentId String
+  tagId     String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([paymentId, tagId])
+  @@index([tagId])
+}
+
+model StandardReason {
+  id        String               @id @default(cuid())
+  action    StandardReasonAction
+  label     String
+  active    Boolean              @default(true)
+  sortOrder Int                  @default(0)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@unique([action, label])
+  @@index([action, active, sortOrder])
+}
+
+model AllocationRule {
+  id              String                @id @default(cuid())
+  name            String
+  category        String?
+  supplierPattern String?
+  active          Boolean               @default(true)
+  priority        Int                   @default(0)
+  splits          AllocationRuleSplit[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([active, priority])
+}
+
+model AllocationRuleSplit {
+  id         String         @id @default(cuid())
+  ruleId     String
+  rule       AllocationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  workId     String
+  work       Work           @relation(fields: [workId], references: [id])
+  percentage Decimal
+
+  @@unique([ruleId, workId])
+  @@index([workId])
+}
+
+model PaymentAllocation {
+  id         String           @id @default(cuid())
+  paymentId  String
+  payment    Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  workId     String
+  work       Work             @relation(fields: [workId], references: [id])
+  percentage Decimal
+  amount     Decimal
+  source     AllocationSource @default(MANUAL)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([paymentId, workId])
+  @@index([workId])
+}
+
+model Advance {
+  id               String        @id @default(cuid())
+  collaboratorName String
+  description      String
+  amount           Decimal
+  spentAmount      Decimal       @default(0)
+  returnedAmount   Decimal       @default(0)
+  grantedAt        DateTime
+  dueDate          DateTime
+  settledAt        DateTime?
+  status           AdvanceStatus @default(ABERTO)
+  notes            String?
+  documents        String        @default("")
+  workId           String?
+  work             Work?         @relation(fields: [workId], references: [id], onDelete: SetNull)
+  createdById      String
+  createdBy        User          @relation("AdvanceCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([status, dueDate])
+  @@index([workId])
 }
 
 model PaymentAction {

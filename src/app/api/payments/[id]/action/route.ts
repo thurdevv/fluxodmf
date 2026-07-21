@@ -1,9 +1,14 @@
 import { z } from "zod";
-import { ActionType, DailyFlowStatus, PaymentStatus } from "@prisma-generated/enums";
+import { ActionType, DailyFlowStatus, PaymentStatus, Role } from "@prisma-generated/enums";
 import { auditLog } from "@/lib/audit";
 import { ApiError, handleApiError, ok } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  chooseApprovalRule,
+  reasonActionByPaymentAction,
+  roleAtLeast,
+} from "@/lib/finance-management";
 import { canAdminister, canEditPayments } from "@/lib/permissions";
 import { serializePayment } from "@/lib/serializers";
 
@@ -18,20 +23,15 @@ const actionSchema = z.object({
     "reopen",
   ]),
   reason: z.string().trim().optional(),
+  standardReasonId: z.string().trim().optional(),
   newDueDate: z.string().trim().optional(),
   note: z.string().trim().optional(),
 });
 
-/**
- * Cancelar e voltar para em aberto mexem em pagamento ja decidido: so o
- * coordenador faz. `reopen` e o nome interno da acao "Voltar para em aberto".
- */
 const CRITICAL_ACTIONS = ["cancel", "reopen"];
 
 function requireReason(reason: string | undefined, message: string) {
-  if (!reason || reason.length < 3) {
-    throw new ApiError(400, message);
-  }
+  if (!reason || reason.length < 3) throw new ApiError(400, message);
 }
 
 function dateFromIsoDay(day: string | undefined) {
@@ -49,104 +49,158 @@ export async function POST(
     const { id } = await context.params;
     const body = actionSchema.parse(await request.json());
 
-    // Funcionário acessa o painel, mas não age sobre pagamentos.
     if (!canEditPayments(user.role)) {
       throw new ApiError(403, "Seu perfil não tem permissão para agir sobre pagamentos.");
     }
-
     if (CRITICAL_ACTIONS.includes(body.action) && !canAdminister(user.role)) {
-      throw new ApiError(
-        403,
-        "Somente o coordenador pode cancelar ou voltar pagamentos para em aberto.",
-      );
+      throw new ApiError(403, "Somente o coordenador pode cancelar ou reabrir pagamentos.");
     }
 
     const payment = await prisma.payment.findUnique({
       where: { id },
-      include: { work: true, importBatch: { include: { dailyFlow: true } } },
+      include: {
+        work: true,
+        tags: true,
+        approvals: true,
+        appliedApprovalRule: true,
+        importBatch: { include: { dailyFlow: true } },
+      },
     });
-
-    if (!payment) {
-      throw new ApiError(404, "Pagamento não encontrado.");
-    }
-
+    if (!payment) throw new ApiError(404, "Pagamento não encontrado.");
     if (payment.importBatch.dailyFlow?.status === DailyFlowStatus.FECHADO) {
-      throw new ApiError(
-        409,
-        "Este fluxo diário está fechado. Um coordenador precisa reabri-lo antes de novas ações.",
-      );
+      throw new ApiError(409, "Este fluxo está fechado. Reabra-o antes de fazer alterações.");
     }
-
     if (payment.status === PaymentStatus.APROVADO && body.action !== "reopen") {
       throw new ApiError(409, "Pagamento aprovado fica bloqueado para novas ações diretas.");
     }
-
     if (payment.status === PaymentStatus.CANCELADO && body.action !== "reopen") {
-      throw new ApiError(
-        409,
-        "Pagamento cancelado precisa voltar para em aberto antes de novas ações.",
-      );
+      throw new ApiError(409, "Pagamento cancelado precisa voltar para em aberto.");
+    }
+
+    let effectiveReason = body.reason;
+    if (body.standardReasonId) {
+      const standardReason = await prisma.standardReason.findUnique({
+        where: { id: body.standardReasonId },
+      });
+      const expectedAction = reasonActionByPaymentAction[body.action];
+      if (!standardReason || !standardReason.active || standardReason.action !== expectedAction) {
+        throw new ApiError(400, "O motivo padronizado não é válido para esta ação.");
+      }
+      effectiveReason = body.reason?.trim()
+        ? `${standardReason.label}: ${body.reason.trim()}`
+        : standardReason.label;
     }
 
     let newStatus: PaymentStatus = payment.status;
     let actionType: ActionType = ActionType.APROVAR;
     let newDueDate: Date | null = null;
+    let approvalRuleId: string | null = payment.appliedApprovalRuleId;
+    let requiredApprovals = payment.requiredApprovals;
+    let requiredApprovalRole = payment.requiredApprovalRole;
+    let approvalCount = payment.approvals.length;
+    let previousStatus = payment.status;
 
     if (body.action === "approve") {
-      newStatus = PaymentStatus.APROVADO;
       actionType = ActionType.APROVAR;
-    }
-
-    if (body.action === "reject") {
-      requireReason(body.reason, "Informe o motivo da reprovação.");
+    } else if (body.action === "reject") {
+      requireReason(effectiveReason, "Informe o motivo da reprovação.");
       newStatus = PaymentStatus.REPROVADO;
       actionType = ActionType.REPROVAR;
-    }
-
-    if (body.action === "transfer") {
-      requireReason(body.reason, "Informe o motivo da transferência.");
+    } else if (body.action === "transfer") {
+      requireReason(effectiveReason, "Informe o motivo da transferência.");
       newDueDate = dateFromIsoDay(body.newDueDate);
-      if (!newDueDate) {
-        throw new ApiError(400, "Informe uma nova data válida.");
-      }
+      if (!newDueDate) throw new ApiError(400, "Informe uma nova data válida.");
       newStatus = PaymentStatus.TRANSFERIDO;
       actionType = ActionType.TRANSFERIR;
-    }
-
-    if (body.action === "request_info") {
-      requireReason(body.reason, "Informe o que precisa ser complementado.");
+    } else if (body.action === "request_info") {
+      requireReason(effectiveReason, "Informe o que precisa ser complementado.");
       newStatus = PaymentStatus.INFO_SOLICITADA;
       actionType = ActionType.SOLICITAR_INFO;
-    }
-
-    if (body.action === "answer_info") {
-      requireReason(body.reason ?? body.note, "Informe a resposta.");
+    } else if (body.action === "answer_info") {
+      requireReason(effectiveReason ?? body.note, "Informe a resposta.");
       newStatus = PaymentStatus.CORRIGIDO;
       actionType = ActionType.RESPONDER_INFO;
-    }
-
-    if (body.action === "cancel") {
-      requireReason(body.reason, "Informe o motivo do cancelamento.");
+    } else if (body.action === "cancel") {
+      requireReason(effectiveReason, "Informe o motivo do cancelamento.");
       newStatus = PaymentStatus.CANCELADO;
       actionType = ActionType.CANCELAR;
-    }
-
-    if (body.action === "reopen") {
-      requireReason(body.reason, "Informe o motivo para voltar o pagamento a em aberto.");
+    } else if (body.action === "reopen") {
+      requireReason(effectiveReason, "Informe o motivo para voltar a em aberto.");
       newStatus = PaymentStatus.PENDENTE;
       actionType = ActionType.REABRIR;
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      if (body.action === "approve") {
+        // Serializa aprovações do mesmo pagamento. Sem o lock, dois aprovadores
+        // simultâneos poderiam contar apenas a própria linha e deixar uma dupla
+        // aprovação indevidamente pendente mesmo após os dois registros.
+        await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${payment.id} FOR UPDATE`;
+        const lockedPayment = await tx.payment.findUnique({
+          where: { id: payment.id },
+          include: { tags: true, approvals: true, appliedApprovalRule: true },
+        });
+        if (!lockedPayment) throw new ApiError(404, "Pagamento não encontrado.");
+        if (lockedPayment.status === PaymentStatus.APROVADO) {
+          throw new ApiError(409, "Pagamento aprovado fica bloqueado para novas ações diretas.");
+        }
+        if (lockedPayment.status === PaymentStatus.CANCELADO) {
+          throw new ApiError(409, "Pagamento cancelado precisa voltar para em aberto.");
+        }
+
+        const activeRules = lockedPayment.appliedApprovalRule
+          ? []
+          : await tx.approvalRule.findMany({
+              where: { active: true },
+              orderBy: { priority: "desc" },
+            });
+        const rule =
+          lockedPayment.appliedApprovalRule ?? chooseApprovalRule(lockedPayment, activeRules);
+        approvalRuleId = rule?.id ?? null;
+        requiredApprovals = rule?.requiredApprovals ?? 1;
+        requiredApprovalRole = rule?.requiredRole ?? Role.GESTOR;
+        const preventSelfApproval = rule?.preventSelfApproval ?? true;
+
+        if (preventSelfApproval && lockedPayment.createdById === user.id) {
+          throw new ApiError(403, "Quem criou ou importou o pagamento não pode aprová-lo.");
+        }
+        if (!roleAtLeast(user.role, requiredApprovalRole)) {
+          throw new ApiError(
+            403,
+            requiredApprovalRole === Role.COORDENADOR
+              ? "Este pagamento exige aprovação de coordenador."
+              : "Seu perfil não atende à alçada deste pagamento.",
+          );
+        }
+        if (lockedPayment.approvals.some((approval) => approval.actorId === user.id)) {
+          throw new ApiError(409, "Você já registrou sua aprovação neste pagamento.");
+        }
+
+        await tx.paymentApproval.create({
+          data: { paymentId: payment.id, actorId: user.id, approvalRuleId },
+        });
+        approvalCount = await tx.paymentApproval.count({ where: { paymentId: payment.id } });
+        newStatus =
+          approvalCount >= requiredApprovals
+            ? PaymentStatus.APROVADO
+            : PaymentStatus.PENDENTE;
+        previousStatus = lockedPayment.status;
+      } else {
+        await tx.paymentApproval.deleteMany({ where: { paymentId: payment.id } });
+      }
+
       await tx.paymentAction.create({
         data: {
           paymentId: payment.id,
           actorId: user.id,
           type: actionType,
-          previousStatus: payment.status,
+          previousStatus,
           newStatus,
-          reason: body.reason,
-          note: body.note,
+          reason: effectiveReason,
+          note:
+            body.action === "approve" && newStatus !== PaymentStatus.APROVADO
+              ? `Aprovação ${approvalCount} de ${requiredApprovals}`
+              : body.note,
           newDueDate,
         },
       });
@@ -156,14 +210,21 @@ export async function POST(
         data: {
           status: newStatus,
           currentDueDate: newDueDate ?? undefined,
+          appliedApprovalRuleId: body.action === "approve" ? approvalRuleId : null,
+          requiredApprovals: body.action === "approve" ? requiredApprovals : 1,
+          requiredApprovalRole: body.action === "approve" ? requiredApprovalRole : Role.GESTOR,
         },
         include: {
           work: true,
           importBatch: true,
-          actions: {
-            orderBy: { createdAt: "desc" },
-            include: { actor: true },
+          tags: { include: { tag: true } },
+          allocations: { include: { work: true } },
+          approvals: {
+            orderBy: { createdAt: "asc" },
+            include: { actor: { select: { id: true, name: true, role: true } } },
           },
+          appliedApprovalRule: true,
+          actions: { orderBy: { createdAt: "desc" }, include: { actor: true } },
         },
       });
     });
@@ -177,14 +238,24 @@ export async function POST(
         acao: body.action,
         fornecedor: payment.supplierName,
         conta: payment.work.name,
-        de: payment.status,
+        de: previousStatus,
         para: newStatus,
-        motivo: body.reason,
+        motivo: effectiveReason,
+        aprovacoes: body.action === "approve" ? `${approvalCount}/${requiredApprovals}` : undefined,
         ...(newDueDate ? { novaData: newDueDate.toISOString().slice(0, 10) } : {}),
       },
     });
 
-    return ok({ payment: serializePayment(updated) });
+    return ok({
+      payment: serializePayment(updated),
+      approval: body.action === "approve"
+        ? {
+            count: approvalCount,
+            required: requiredApprovals,
+            completed: newStatus === PaymentStatus.APROVADO,
+          }
+        : null,
+    });
   } catch (error) {
     return handleApiError(error);
   }

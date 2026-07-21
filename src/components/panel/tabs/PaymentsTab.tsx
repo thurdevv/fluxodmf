@@ -11,6 +11,8 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Split,
+  Tags,
   XCircle,
 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
@@ -34,6 +36,14 @@ type Payment = {
   costCenter: string;
   status: StatusKey;
   work: { id: string; name: string };
+  hasReceipt: boolean;
+  receiptReceivedAt?: string | null;
+  requiredApprovals: number;
+  requiredApprovalRole: "GESTOR" | "COORDENADOR";
+  approvals?: Array<{ id: string; createdAt: string; actor: { id: string; name: string; role: string } }>;
+  tags?: Array<{ tagId: string; tag: { id: string; name: string; color: string } }>;
+  allocations?: Array<{ workId: string; percentage: number; amount: number; work: { id: string; name: string } }>;
+  appliedApprovalRule?: { id: string; name: string } | null;
   actions?: {
     id: string;
     type: string;
@@ -83,6 +93,12 @@ type DailyFlow = {
 };
 
 type DailyFlowsResponse = { flows: DailyFlow[] };
+
+type PaymentOptions = {
+  tags: Array<{ id: string; name: string; color: string }>;
+  reasons: Array<{ id: string; action: string; label: string }>;
+  works: Array<{ id: string; name: string }>;
+};
 
 const flowStatusLabels: Record<DailyFlowStatus, string> = {
   RASCUNHO: "Rascunho",
@@ -144,6 +160,7 @@ export function PaymentsTab() {
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState<Mode | null>(null);
   const [reason, setReason] = useState("");
+  const [standardReasonId, setStandardReasonId] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
 
   // Selecao em lote: ids marcados por clique na lista.
@@ -151,12 +168,18 @@ export function PaymentsTab() {
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchAction, setBatchAction] = useState<BatchAction>("approve");
   const [batchReason, setBatchReason] = useState("");
+  const [batchStandardReasonId, setBatchStandardReasonId] = useState("");
   const [batchDueDate, setBatchDueDate] = useState("");
   const [batchProgress, setBatchProgress] = useState(0);
   const [flowId, setFlowId] = useState("");
   const [flowBusy, setFlowBusy] = useState(false);
   const [flowReopenOpen, setFlowReopenOpen] = useState(false);
   const [flowReason, setFlowReason] = useState("");
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [metadataTags, setMetadataTags] = useState<string[]>([]);
+  const [metadataAllocations, setMetadataAllocations] = useState<Record<string, string>>({});
+  const [metadataReceipt, setMetadataReceipt] = useState(false);
+  const [metadataReceiptDate, setMetadataReceiptDate] = useState("");
 
   const {
     data: flowData,
@@ -164,6 +187,7 @@ export function PaymentsTab() {
     loading: flowsLoading,
     reload: reloadFlows,
   } = useFetchData<DailyFlowsResponse>("/api/daily-flows");
+  const { data: options } = useFetchData<PaymentOptions>("/api/payments/options");
   const selectedFlow =
     flowData?.flows.find((flow) => flow.id === flowId) ?? flowData?.flows[0] ?? null;
   const effectiveFlowId = selectedFlow?.id ?? "";
@@ -253,20 +277,71 @@ export function PaymentsTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...payload }),
       });
-      const data = await response.json();
+      const result = await response.json();
 
       if (!response.ok) {
-        setError(data.error ?? "Não foi possível concluir a ação.");
+        setError(result.error ?? "Não foi possível concluir a ação.");
         return;
       }
 
       setMode(null);
       setReason("");
+      setStandardReasonId("");
       setNewDueDate("");
-      setMessage("Ação registrada.");
+      setMessage(
+        result.approval && !result.approval.completed
+          ? `Aprovação ${result.approval.count} de ${result.approval.required} registrada. Ainda falta aprovação.`
+          : "Ação registrada.",
+      );
       reload();
     } catch {
       setError("Falha de conexão ao executar a ação.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openMetadata() {
+    if (!selected) return;
+    setMetadataTags(selected.tags?.map((item) => item.tagId) ?? []);
+    setMetadataAllocations(
+      Object.fromEntries(selected.allocations?.map((item) => [item.workId, String(item.percentage)]) ?? []),
+    );
+    setMetadataReceipt(selected.hasReceipt);
+    setMetadataReceiptDate(selected.receiptReceivedAt?.slice(0, 10) ?? "");
+    setMetadataOpen(true);
+  }
+
+  async function saveMetadata(event: FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const allocations = Object.entries(metadataAllocations)
+      .filter(([, percentage]) => Number(percentage) > 0)
+      .map(([targetWorkId, percentage]) => ({ workId: targetWorkId, percentage: Number(percentage) }));
+    try {
+      const response = await fetch(`/api/payments/${selected.id}/metadata`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tagIds: metadataTags,
+          allocations,
+          hasReceipt: metadataReceipt,
+          receiptReceivedAt: metadataReceipt && metadataReceiptDate ? metadataReceiptDate : null,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        setError(result.error ?? "Não foi possível salvar a classificação.");
+        return;
+      }
+      setMetadataOpen(false);
+      setMessage("Tags, comprovante e rateio atualizados.");
+      reload();
+    } catch {
+      setError("Falha de conexão ao salvar a classificação.");
     } finally {
       setBusy(false);
     }
@@ -291,8 +366,8 @@ export function PaymentsTab() {
       batchAction === "approve"
         ? {}
         : batchAction === "transfer"
-          ? { reason: batchReason, newDueDate: batchDueDate }
-          : { reason: batchReason };
+          ? { reason: batchReason, standardReasonId: batchStandardReasonId || undefined, newDueDate: batchDueDate }
+          : { reason: batchReason, standardReasonId: batchStandardReasonId || undefined };
 
     const result: BatchResult = { done: 0, failed: [] };
 
@@ -324,6 +399,7 @@ export function PaymentsTab() {
     setBatchOpen(false);
     setBatch([]);
     setBatchReason("");
+    setBatchStandardReasonId("");
     setBatchDueDate("");
     setBatchProgress(0);
 
@@ -350,11 +426,15 @@ export function PaymentsTab() {
     if (!mode) return;
 
     if (mode === "transfer") {
-      void runAction("transfer", { reason, newDueDate });
+      void runAction("transfer", {
+        reason,
+        standardReasonId: standardReasonId || undefined,
+        newDueDate,
+      });
       return;
     }
 
-    void runAction(mode, { reason });
+    void runAction(mode, { reason, standardReasonId: standardReasonId || undefined });
   }
 
   if (!flowsLoading && flowData && flowData.flows.length === 0) {
@@ -674,9 +754,48 @@ export function PaymentsTab() {
                     <span>Status</span>
                     <StatusBadge status={selected.status} />
                   </div>
+                  <div className="detail-item">
+                    <span>Alçada</span>
+                    <strong>
+                      {selected.approvals?.length ?? 0} / {selected.requiredApprovals} aprovação(ões)
+                    </strong>
+                    <small className="muted">
+                      {selected.appliedApprovalRule?.name ?? `Perfil mínimo: ${selected.requiredApprovalRole}`}
+                    </small>
+                  </div>
+                  <div className="detail-item">
+                    <span>Nota / comprovante</span>
+                    <strong>{selected.hasReceipt ? "Recebido" : "Pendente"}</strong>
+                    {selected.receiptReceivedAt ? <small>{shortDate(selected.receiptReceivedAt)}</small> : null}
+                  </div>
                 </div>
 
+                {selected.tags?.length ? (
+                  <div className="tag-list" style={{ marginTop: 12 }}>
+                    {selected.tags.map(({ tag }) => (
+                      <span className="tag-chip" style={{ borderColor: tag.color }} key={tag.id}>
+                        <i style={{ background: tag.color }} /> {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {selected.allocations?.length ? (
+                  <div className="alert" style={{ marginTop: 12 }}>
+                    <strong>Rateio:</strong>{" "}
+                    {selected.allocations.map((item) => `${item.work.name} ${item.percentage}%`).join(" · ")}
+                  </div>
+                ) : null}
+
                 <div className="button-row" style={{ marginTop: 14 }}>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={busy || flowLocked}
+                    onClick={openMetadata}
+                  >
+                    <Tags size={16} /> Classificar e ratear
+                  </button>
                   <button
                     className="button success"
                     type="button"
@@ -781,13 +900,28 @@ export function PaymentsTab() {
             ) : null}
 
             <div className="field">
-              <label htmlFor="reason">Motivo</label>
+              <label htmlFor="standard-reason">Motivo padronizado</label>
+              <select
+                className="select"
+                id="standard-reason"
+                value={standardReasonId}
+                onChange={(event) => setStandardReasonId(event.target.value)}
+              >
+                <option value="">Outro motivo</option>
+                {options?.reasons
+                  .filter((item) => item.action === ({ reject: "REPROVAR", transfer: "TRANSFERIR", cancel: "CANCELAR", reopen: "REABRIR" } as const)[mode])
+                  .map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="reason">{standardReasonId ? "Complemento (opcional)" : "Motivo"}</label>
               <textarea
                 className="textarea"
                 id="reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                required
+                required={!standardReasonId}
                 minLength={3}
               />
             </div>
@@ -802,12 +936,52 @@ export function PaymentsTab() {
                 onClick={() => {
                   setMode(null);
                   setReason("");
+                  setStandardReasonId("");
                 }}
                 disabled={busy}
               >
                 Voltar
               </button>
             </div>
+          </form>
+        </div>
+      ) : null}
+
+      {metadataOpen ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <form className="modal modal-wide" onSubmit={saveMetadata}>
+            <h2><Split size={20} /> Classificação e rateio</h2>
+            <p>{selected?.supplierName} · {selected ? money(selected.amount) : ""}</p>
+            <div className="field">
+              <label>Tags</label>
+              <div className="tag-list">
+                {options?.tags.map((tag) => (
+                  <label className="tag-chip" style={{ borderColor: tag.color }} key={tag.id}>
+                    <input
+                      type="checkbox"
+                      checked={metadataTags.includes(tag.id)}
+                      onChange={() => setMetadataTags((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])}
+                    />
+                    <i style={{ background: tag.color }} /> {tag.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="form-grid two">
+              <label className="check-row span-2">
+                <input type="checkbox" checked={metadataReceipt} onChange={(event) => setMetadataReceipt(event.target.checked)} />
+                Nota fiscal ou comprovante recebido
+              </label>
+              {metadataReceipt ? <div className="field"><label>Data do recebimento</label><input className="input" type="date" value={metadataReceiptDate} onChange={(event) => setMetadataReceiptDate(event.target.value)} /></div> : null}
+              <div className="field span-2"><label>Rateio manual (deixe todos vazios para usar somente a obra principal)</label></div>
+              {options?.works.map((work) => (
+                <div className="field" key={work.id}>
+                  <label>{work.name}</label>
+                  <div className="input-suffix"><input className="input" type="number" min="0" max="100" step="0.01" value={metadataAllocations[work.id] ?? ""} onChange={(event) => setMetadataAllocations({ ...metadataAllocations, [work.id]: event.target.value })} /><span>%</span></div>
+                </div>
+              ))}
+            </div>
+            <div className="button-row"><button className="button" disabled={busy}>{busy ? "Salvando..." : "Salvar"}</button><button className="button secondary" type="button" disabled={busy} onClick={() => setMetadataOpen(false)}>Voltar</button></div>
           </form>
         </div>
       ) : null}
@@ -860,18 +1034,29 @@ export function PaymentsTab() {
             ) : null}
 
             {batchAction !== "approve" ? (
-              <div className="field">
-                <label htmlFor="batch-reason">Motivo (aplicado a todos)</label>
-                <textarea
-                  className="textarea"
-                  id="batch-reason"
-                  value={batchReason}
-                  onChange={(event) => setBatchReason(event.target.value)}
-                  required
-                  minLength={3}
-                  disabled={busy}
-                />
-              </div>
+              <>
+                <div className="field">
+                  <label htmlFor="batch-standard-reason">Motivo padronizado</label>
+                  <select className="select" id="batch-standard-reason" value={batchStandardReasonId} onChange={(event) => setBatchStandardReasonId(event.target.value)} disabled={busy}>
+                    <option value="">Outro motivo</option>
+                    {options?.reasons
+                      .filter((item) => item.action === ({ reject: "REPROVAR", transfer: "TRANSFERIR", reopen: "REABRIR", approve: "" } as const)[batchAction])
+                      .map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="batch-reason">{batchStandardReasonId ? "Complemento (opcional)" : "Motivo (aplicado a todos)"}</label>
+                  <textarea
+                    className="textarea"
+                    id="batch-reason"
+                    value={batchReason}
+                    onChange={(event) => setBatchReason(event.target.value)}
+                    required={!batchStandardReasonId}
+                    minLength={batchStandardReasonId ? undefined : 3}
+                    disabled={busy}
+                  />
+                </div>
+              </>
             ) : null}
 
             <div className="panel pad" style={{ maxHeight: 140, overflowY: "auto" }}>
