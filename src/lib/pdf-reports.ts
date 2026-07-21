@@ -229,6 +229,9 @@ type FlowReportPayment = {
   currentDueDate: Date;
   status: string;
   work: { name: string };
+  requiredApprovals: number;
+  approvals: Array<{ id: string }>;
+  allocations: Array<{ percentage: number | string | { toString(): string }; work: { name: string } }>;
 };
 
 type FlowReportEvent = {
@@ -351,11 +354,18 @@ export async function buildDailyFlowReportPdf(flow: FlowReport) {
 
   section("Pagamentos do fluxo");
   const paymentColumns: TableColumn<FlowReportPayment>[] = [
-    { label: "Fornecedor", width: 160, value: (row) => row.supplierName },
-    { label: "Conta", width: 92, value: (row) => row.work.name },
-    { label: "Vencimento", width: 76, value: (row) => brDate(row.currentDueDate) },
-    { label: "Status", width: 94, value: (row) => row.status.replaceAll("_", " ") },
-    { label: "Valor", width: 101, align: "right", value: (row) => brl(numberFromDecimal(row.amount)) },
+    { label: "Fornecedor", width: 120, value: (row) => row.supplierName },
+    {
+      label: "Conta / rateio",
+      width: 120,
+      value: (row) => row.allocations.length
+        ? row.allocations.map((item) => `${item.work.name} ${Number(item.percentage.toString())}%`).join(" / ")
+        : row.work.name,
+    },
+    { label: "Vencimento", width: 65, value: (row) => brDate(row.currentDueDate) },
+    { label: "Status", width: 75, value: (row) => row.status.replaceAll("_", " ") },
+    { label: "Alçada", width: 65, value: (row) => `${row.approvals.length}/${row.requiredApprovals}` },
+    { label: "Valor", width: 78, align: "right", value: (row) => brl(numberFromDecimal(row.amount)) },
   ];
   const paymentHeader = () => {
     ensure(46);

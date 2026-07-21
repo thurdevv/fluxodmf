@@ -2,6 +2,9 @@
 
 import clsx from "clsx";
 import {
+  BanknoteArrowUp,
+  BarChart3,
+  CalendarRange,
   ClipboardCheck,
   FileSpreadsheet,
   LayoutDashboard,
@@ -19,6 +22,9 @@ import { BrandMark } from "@/components/BrandMark";
 import { MaintenanceBar } from "@/components/panel/MaintenanceBar";
 import { PanelContext, type PanelUser } from "@/components/panel/PanelContext";
 import { DashboardTab } from "@/components/panel/tabs/DashboardTab";
+import { AdvancesTab } from "@/components/panel/tabs/AdvancesTab";
+import { AnalyticsTab } from "@/components/panel/tabs/AnalyticsTab";
+import { FinancialCalendarTab } from "@/components/panel/tabs/FinancialCalendarTab";
 import { ImportTab } from "@/components/panel/tabs/ImportTab";
 import { LogsTab } from "@/components/panel/tabs/LogsTab";
 import { PaymentsTab } from "@/components/panel/tabs/PaymentsTab";
@@ -53,6 +59,24 @@ const tabDefinitions: TabDefinition[] = [
     Component: DashboardTab,
   },
   {
+    id: "indicadores",
+    label: "Indicadores",
+    title: "Indicadores gerenciais",
+    subtitle: "Fornecedores, obras, categorias, prazos e documentos",
+    section: "PAINEL",
+    icon: BarChart3,
+    Component: AnalyticsTab,
+  },
+  {
+    id: "calendario",
+    label: "Calendário",
+    title: "Calendário financeiro",
+    subtitle: "Vencimentos, aportes e prestações de contas",
+    section: "PAINEL",
+    icon: CalendarRange,
+    Component: FinancialCalendarTab,
+  },
+  {
     id: "importar",
     label: "Importação",
     title: "Importação de fluxo",
@@ -78,6 +102,15 @@ const tabDefinitions: TabDefinition[] = [
     section: "OPERAÇÃO",
     icon: ClipboardCheck,
     Component: PaymentsTab,
+  },
+  {
+    id: "adiantamentos",
+    label: "Adiantamentos",
+    title: "Adiantamentos",
+    subtitle: "Prestação de contas de colaboradores",
+    section: "OPERAÇÃO",
+    icon: BanknoteArrowUp,
+    Component: AdvancesTab,
   },
   {
     id: "usuarios",

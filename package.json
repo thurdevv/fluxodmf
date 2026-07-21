@@ -10,6 +10,8 @@
     "build": "next build",
     "start": "npm run db:setup && next start",
     "lint": "eslint .",
+    "check:finance": "tsx scripts/check-finance-management.ts",
+    "check:migration": "node scripts/check-migration.mjs",
     "prisma:generate": "prisma generate",
     "db:setup": "npm run db:migrate:deploy && npm run db:seed",
     "db:migrate": "prisma migrate dev",

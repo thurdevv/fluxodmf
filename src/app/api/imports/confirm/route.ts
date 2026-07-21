@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { ActionType, DailyFlowEventType, PaymentStatus } from "@prisma-generated/enums";
+import { AllocationSource, ActionType, DailyFlowEventType, PaymentStatus } from "@prisma-generated/enums";
 import { auditLog } from "@/lib/audit";
 import { ApiError, handleApiError, ok } from "@/lib/api";
 import { requireTab } from "@/lib/auth";
 import { matchWork, normalizeName, uniqueSlug } from "@/lib/cost-center";
 import { prisma } from "@/lib/db";
+import { allocationRows, chooseAllocationRule } from "@/lib/finance-management";
 
 // workId e opcional: a conta pode nao existir ainda e ser criada aqui. Quem
 // decide qual conta vale e o servidor, a partir do nome do centro de custo.
@@ -88,6 +89,11 @@ export async function POST(request: Request) {
        * sido criada por outra importacao.
        */
       const existingWorks = await tx.work.findMany();
+      const allocationRules = await tx.allocationRule.findMany({
+        where: { active: true },
+        orderBy: { priority: "desc" },
+        include: { splits: true },
+      });
       const takenSlugs = new Set(existingWorks.map((work) => work.slug));
       const resolved = new Map<string, string>();
       const createdAccounts: string[] = [];
@@ -171,6 +177,17 @@ export async function POST(request: Request) {
             note: `Importado no fluxo ${flowName}`,
           },
         });
+
+        const allocationRule = chooseAllocationRule(payment, allocationRules);
+        if (allocationRule) {
+          await tx.paymentAllocation.createMany({
+            data: allocationRows(payment.amount, allocationRule.splits).map((split) => ({
+              paymentId: payment.id,
+              ...split,
+              source: AllocationSource.REGRA,
+            })),
+          });
+        }
       }
 
       for (const contribution of validContributions) {

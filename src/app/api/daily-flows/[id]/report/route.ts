@@ -25,7 +25,11 @@ export async function GET(
             importedBy: { select: { name: true } },
             payments: {
               orderBy: [{ currentDueDate: "asc" }, { supplierName: "asc" }],
-              include: { work: true },
+              include: {
+                work: true,
+                allocations: { include: { work: true } },
+                approvals: true,
+              },
             },
           },
         },

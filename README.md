@@ -76,16 +76,33 @@ são efêmeros e desaparecem em reinícios e novos deploys.
 
 O acesso é por perfil, e cada aba do painel só existe para quem pode vê-la:
 
-| | Dashboard | Importação | Conciliação | Pagamentos | Usuários | Permissões | Logs |
-| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| **Funcionário** | ✓ | ✓ | ✓ | | | | |
-| **Gestor** | ✓ | ✓ | ✓ | ✓ | | | |
-| **Coordenador** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| | Dashboard | Indicadores | Calendário | Importação | Conciliação | Pagamentos | Adiantamentos | Configurações | Administração |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| **Funcionário** | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
+| **Gestor** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| **Coordenador** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-Todos os perfis acessam as áreas do painel: Dashboard, Importação e Conciliação.
+Todos os perfis acessam Dashboard, Indicadores, Calendário, Importação e Conciliação.
 A operação de pagamentos permanece restrita a Gestor e Coordenador. Coordenador
 tem acesso total, incluindo as ações críticas (cancelar e reabrir pagamento,
 gerenciar usuários e permissões).
+
+## Gestão financeira avançada
+
+- **Alçadas:** regras por faixa de valor, obra, categoria ou tag, com perfil mínimo,
+  quantidade de aprovadores e bloqueio de autoaprovação. Os padrões iniciais são
+  Gestor até R$ 5 mil, Coordenador acima desse valor e dupla aprovação de
+  Coordenador para a tag `Extraordinário`.
+- **Indicadores:** gasto por fornecedor, evolução por obra (considerando rateios),
+  crescimento de categorias, tempo médio de aprovação, remarcações, motivos de
+  reprovação e entrega de notas no prazo.
+- **Calendário:** visão mensal ou semanal de pagamentos, aportes e prazos de
+  prestação de contas.
+- **Rateios:** regras configuráveis por categoria/fornecedor e edição manual no
+  pagamento. Nenhum percentual DG × JR fica fixo no código.
+- **Adiantamentos:** concessão, prazo, valor comprovado, devolução, saldo e status
+  da prestação de contas.
+- **Motivos e tags:** cadastros administráveis e reutilizados nas ações do fluxo.
 
 Esconder a aba **não** é a proteção: cada rota de API revalida o perfil no
 servidor, e perfil e status são lidos do banco a cada requisição, nunca do
