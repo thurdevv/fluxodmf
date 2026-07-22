@@ -17,6 +17,7 @@ export const TAB_IDS = [
   "calendario",
   "importar",
   "conciliacao",
+  "solicitacoes",
   "pagamentos",
   "adiantamentos",
   "usuarios",
@@ -36,6 +37,7 @@ export const tabRoles: Record<TabId, Role[]> = {
   calendario: ALL_ROLES,
   importar: ALL_ROLES,
   conciliacao: ALL_ROLES,
+  solicitacoes: ALL_ROLES,
   pagamentos: MANAGEMENT,
   adiantamentos: MANAGEMENT,
   usuarios: CRITICAL,
@@ -73,7 +75,7 @@ export const roleLabels: Record<Role, string> = {
 };
 
 export const roleDescriptions: Record<Role, string> = {
-  FUNCIONARIO: "Acessa todas as áreas do painel, incluindo a conciliação.",
+  FUNCIONARIO: "Acessa o painel, solicita pagamentos e faz a conciliação.",
   GESTOR: "Acessa o painel e a operação de pagamentos.",
   COORDENADOR: "Acesso total, incluindo usuários, permissões e logs.",
 };

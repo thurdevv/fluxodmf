@@ -84,6 +84,13 @@ enum AllocationSource {
   REGRA
 }
 
+enum PaymentRequestStatus {
+  PENDENTE
+  APROVADO
+  REPROVADO
+  CANCELADO
+}
+
 model User {
   id            String            @id @default(cuid())
   name          String
@@ -107,6 +114,9 @@ model User {
   flowEvents    DailyFlowEvent[]  @relation("DailyFlowEventActor")
   approvals     PaymentApproval[]
   advances      Advance[]         @relation("AdvanceCreatedBy")
+  responsibleWorks Work[] @relation("WorkResponsible")
+  paymentRequests   PaymentRequest[] @relation("PaymentRequestRequestedBy")
+  reviewedPaymentRequests PaymentRequest[] @relation("PaymentRequestReviewedBy")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -126,6 +136,9 @@ model Work {
   allocationSplits  AllocationRuleSplit[]
   paymentAllocations PaymentAllocation[]
   advances          Advance[]
+  paymentRequests    PaymentRequest[]
+  responsibleUserId  String?
+  responsibleUser    User?          @relation("WorkResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 }
@@ -343,6 +356,44 @@ model Advance {
 
   @@index([status, dueDate])
   @@index([workId])
+}
+
+model PaymentRequest {
+  id             String               @id @default(cuid())
+  supplierName   String
+  description    String
+  amount         Decimal
+  dueDate        DateTime
+  category       String               @default("")
+  workId         String
+  work           Work                 @relation(fields: [workId], references: [id])
+  requestedById  String
+  requestedBy    User                 @relation("PaymentRequestRequestedBy", fields: [requestedById], references: [id])
+  status         PaymentRequestStatus @default(PENDENTE)
+  reviewedById   String?
+  reviewedBy     User?                @relation("PaymentRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  reviewReason   String?
+  attachments    PaymentRequestAttachment[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([workId, status, createdAt])
+  @@index([requestedById, status, createdAt])
+  @@index([status, createdAt])
+}
+
+model PaymentRequestAttachment {
+  id        String         @id @default(cuid())
+  requestId String
+  request   PaymentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime       @default(now())
+
+  @@index([requestId])
 }
 
 model PaymentAction {

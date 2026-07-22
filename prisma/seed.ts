@@ -80,7 +80,7 @@ async function main() {
 
   // Login inicial pedido na especificacao: jfx / jfx. So o nome exibido e o
   // e-mail sao genericos; as credenciais seguem as combinadas.
-  await upsertUser({
+  const initialAdmin = await upsertUser({
     name: "Administrador",
     username: "jfx",
     email: "admin@djfluxo.local",
@@ -88,6 +88,10 @@ async function main() {
     status: UserStatus.ATIVO,
     password: "jfx",
     workIds,
+  });
+  await prisma.work.updateMany({
+    where: { id: { in: workIds }, responsibleUserId: null },
+    data: { responsibleUserId: initialAdmin.id },
   });
 
   console.log("Seed concluido.");
