@@ -14,11 +14,23 @@ type UsersResponse = {
   error?: string;
 };
 
+type ManagedWork = {
+  id: string;
+  name: string;
+  slug: string;
+  aliases: string[];
+  active: boolean;
+  responsibleUser: { id: string; name: string } | null;
+};
+
+type ManagedWorksResponse = { works: ManagedWork[] };
+
 const tabLabels: Record<(typeof TAB_IDS)[number], string> = {
   dashboard: "Dashboard",
   indicadores: "Indicadores",
   calendario: "Calendário",
   importar: "Importação",
+  solicitacoes: "Solicitações",
   conciliacao: "Conciliação",
   pagamentos: "Pagamentos",
   adiantamentos: "Adiantamentos",
@@ -31,6 +43,8 @@ export function PermissionsTab() {
   const { user: currentUser } = usePanel();
   const { data, error, loading, reload, setError } =
     useFetchData<UsersResponse>("/api/admin/users");
+  const { data: worksData, reload: reloadWorks } =
+    useFetchData<ManagedWorksResponse>("/api/admin/works");
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
 
@@ -72,6 +86,37 @@ export function PermissionsTab() {
       : [...current, workId];
 
     void update(target.id, { workIds: next }, `Contas de ${target.name} atualizadas.`);
+  }
+
+  async function updateResponsible(work: ManagedWork, responsibleUserId: string) {
+    setBusyId(work.id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/works", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: work.id,
+          name: work.name,
+          slug: work.slug,
+          aliases: work.aliases,
+          active: work.active,
+          responsibleUserId: responsibleUserId || null,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setError(body.error ?? "Não foi possível definir o responsável.");
+        return;
+      }
+      setMessage(`Responsável de ${work.name} atualizado.`);
+      reloadWorks();
+    } catch {
+      setError("Falha de conexão.");
+    } finally {
+      setBusyId("");
+    }
   }
 
   return (
@@ -204,6 +249,58 @@ export function PermissionsTab() {
                   <tr>
                     <td className="daily-flow-empty" colSpan={4}>
                       Nenhum usuário ativo.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-header">
+          <div>
+            <h2>Responsáveis pelas obras</h2>
+            <span className="muted">A pessoa indicada aprova as solicitações de pagamento daquela obra.</span>
+          </div>
+        </div>
+        <div className="panel">
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Obra</th>
+                  <th>Responsável pela aprovação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(worksData?.works ?? []).filter((work) => work.active).map((work) => (
+                  <tr key={work.id}>
+                    <td>{work.name}</td>
+                    <td>
+                      <select
+                        className="select"
+                        value={work.responsibleUser?.id ?? ""}
+                        disabled={busyId === work.id}
+                        onChange={(event) => void updateResponsible(work, event.target.value)}
+                        aria-label={`Responsável por ${work.name}`}
+                      >
+                        <option value="">Não definido</option>
+                        {users
+                          .filter((item) => item.role === Role.GESTOR || item.role === Role.COORDENADOR)
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} ({roleLabels[item.role]})
+                            </option>
+                          ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+                {worksData && worksData.works.filter((work) => work.active).length === 0 ? (
+                  <tr>
+                    <td className="daily-flow-empty" colSpan={2}>
+                      Nenhuma obra ativa.
                     </td>
                   </tr>
                 ) : null}

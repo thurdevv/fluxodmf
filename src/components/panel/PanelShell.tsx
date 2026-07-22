@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   LayoutDashboard,
   LogOut,
+  FilePlus2,
   Menu,
   Scale,
   ScrollText,
@@ -26,6 +27,7 @@ import { AdvancesTab } from "@/components/panel/tabs/AdvancesTab";
 import { AnalyticsTab } from "@/components/panel/tabs/AnalyticsTab";
 import { FinancialCalendarTab } from "@/components/panel/tabs/FinancialCalendarTab";
 import { ImportTab } from "@/components/panel/tabs/ImportTab";
+import { PaymentRequestsTab } from "@/components/panel/tabs/PaymentRequestsTab";
 import { LogsTab } from "@/components/panel/tabs/LogsTab";
 import { PaymentsTab } from "@/components/panel/tabs/PaymentsTab";
 import { PermissionsTab } from "@/components/panel/tabs/PermissionsTab";
@@ -84,6 +86,15 @@ const tabDefinitions: TabDefinition[] = [
     section: "PAINEL",
     icon: FileSpreadsheet,
     Component: ImportTab,
+  },
+  {
+    id: "solicitacoes",
+    label: "Solicitações",
+    title: "Solicitações de pagamento",
+    subtitle: "Envie pagamentos para aprovação da obra",
+    section: "PAINEL",
+    icon: FilePlus2,
+    Component: PaymentRequestsTab,
   },
   {
     id: "conciliacao",

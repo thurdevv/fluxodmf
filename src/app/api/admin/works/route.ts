@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { Role, UserStatus } from "@prisma-generated/enums";
 import { auditLog } from "@/lib/audit";
-import { handleApiError, ok } from "@/lib/api";
+import { ApiError, handleApiError, ok } from "@/lib/api";
 import { requireTab, requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -10,6 +11,7 @@ const workSchema = z.object({
   slug: z.string().min(2),
   aliases: z.array(z.string()).default([]),
   active: z.boolean().optional(),
+  responsibleUserId: z.string().nullable().optional(),
 });
 
 type WorkRecord = {
@@ -19,22 +21,45 @@ type WorkRecord = {
   costCenterAliases: string;
   active: boolean;
   createdAt: Date;
+  responsibleUserId: string | null;
+  responsibleUser?: { id: string; name: string } | null;
   updatedAt: Date;
 };
 
 function serializeWork(work: WorkRecord) {
   return {
     ...work,
+    responsibleUser: work.responsibleUser
+      ? { id: work.responsibleUser.id, name: work.responsibleUser.name }
+      : null,
     aliases: JSON.parse(work.costCenterAliases || "[]"),
     createdAt: work.createdAt.toISOString(),
     updatedAt: work.updatedAt.toISOString(),
   };
 }
 
+async function assertResponsibleUser(id: string | null | undefined) {
+  if (!id) return;
+  const user = await prisma.user.findFirst({
+    where: {
+      id,
+      status: UserStatus.ATIVO,
+      role: { in: [Role.GESTOR, Role.COORDENADOR] },
+    },
+    select: { id: true },
+  });
+  if (!user) {
+    throw new ApiError(400, "O responsável precisa ser um gestor ou coordenador ativo.");
+  }
+}
+
 export async function GET() {
   try {
     await requireUser();
-    const works = await prisma.work.findMany({ orderBy: { name: "asc" } });
+    const works = await prisma.work.findMany({
+      orderBy: { name: "asc" },
+      include: { responsibleUser: { select: { id: true, name: true } } },
+    });
     return ok({ works: works.map(serializeWork) });
   } catch (error) {
     return handleApiError(error);
@@ -46,12 +71,14 @@ export async function POST(request: Request) {
     const actor = await requireTab("permissoes");
     const body = workSchema.parse(await request.json());
 
+    await assertResponsibleUser(body.responsibleUserId);
     const work = await prisma.work.create({
       data: {
         name: body.name,
         slug: body.slug,
         costCenterAliases: JSON.stringify(body.aliases),
         active: body.active ?? true,
+        responsibleUserId: body.responsibleUserId ?? null,
       },
     });
 
@@ -73,6 +100,7 @@ export async function PATCH(request: Request) {
     const actor = await requireTab("permissoes");
     const body = workSchema.extend({ id: z.string() }).parse(await request.json());
 
+    await assertResponsibleUser(body.responsibleUserId);
     const work = await prisma.work.update({
       where: { id: body.id },
       data: {
@@ -80,6 +108,7 @@ export async function PATCH(request: Request) {
         slug: body.slug,
         costCenterAliases: JSON.stringify(body.aliases),
         active: body.active ?? true,
+        responsibleUserId: body.responsibleUserId ?? null,
       },
     });
 

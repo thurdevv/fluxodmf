@@ -76,13 +76,13 @@ são efêmeros e desaparecem em reinícios e novos deploys.
 
 O acesso é por perfil, e cada aba do painel só existe para quem pode vê-la:
 
-| | Dashboard | Indicadores | Calendário | Importação | Conciliação | Pagamentos | Adiantamentos | Configurações | Administração |
-| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| **Funcionário** | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
-| **Gestor** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | |
-| **Coordenador** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| | Dashboard | Indicadores | Calendário | Importação | Solicitações | Conciliação | Pagamentos | Adiantamentos | Configurações | Administração |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| **Funcionário** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
+| **Gestor** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| **Coordenador** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-Todos os perfis acessam Dashboard, Indicadores, Calendário, Importação e Conciliação.
+Todos os perfis acessam Dashboard, Indicadores, Calendário, Importação, Solicitações e Conciliação.
 A operação de pagamentos permanece restrita a Gestor e Coordenador. Coordenador
 tem acesso total, incluindo as ações críticas (cancelar e reabrir pagamento,
 gerenciar usuários e permissões).
@@ -120,6 +120,19 @@ O sistema impede que o último coordenador ativo se rebaixe, se desative ou seja
 excluído — sem isso, dá para ficar sem ninguém capaz de gerenciar o acesso.
 Usuário com histórico (importações, pagamentos, ações) é desativado em vez de
 excluído, para não quebrar a auditoria.
+
+## Solicitações de pagamento
+
+Antes de entrar no fluxo diário, qualquer colaborador pode abrir uma solicitação
+para uma obra à qual esteja vinculado. Fornecedor, valor, vencimento, descrição,
+obra e ao menos um anexo são obrigatórios; os anexos aceitos são PDF, JPG e PNG,
+com até 5 MB cada e no máximo cinco por solicitação.
+
+Cada obra tem um **responsável pela aprovação**, definido por um coordenador na
+aba **Permissões**. O responsável — ou um coordenador — aprova ou reprova a
+solicitação, sempre com motivo na reprovação. A aprovação registra responsável,
+data e histórico, mas não cria pagamento automaticamente: a solicitação aprovada
+fica pronta para conferência e posterior inclusão no fluxo diário.
 
 ## Importação
 
