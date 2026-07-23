@@ -1,4 +1,5 @@
 import { ActionType, PaymentStatus } from "@prisma-generated/enums";
+import { z } from "zod";
 import { handleApiError, ok } from "@/lib/api";
 import { requireTab } from "@/lib/auth";
 import { numberValue } from "@/lib/finance-management";
@@ -6,27 +7,50 @@ import { prisma } from "@/lib/db";
 
 const round = (value: number) => Number(value.toFixed(2));
 
-export async function GET() {
+const filterSchema = z
+  .object({
+    from: z.string().date().optional(),
+    to: z.string().date().optional(),
+    workId: z.string().min(1).optional(),
+  })
+  .refine(
+    (filters) => !filters.from || !filters.to || filters.from <= filters.to,
+    { message: "A data inicial deve ser anterior à data final.", path: ["to"] },
+  );
+
+export async function GET(request: Request) {
   try {
     await requireTab("indicadores");
+    const filters = filterSchema.parse(Object.fromEntries(new URL(request.url).searchParams));
     const now = new Date();
-    const yearAgo = new Date(now);
-    yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
-    const thirtyDaysAgo = new Date(now);
+    const defaultFrom = new Date(now);
+    defaultFrom.setUTCFullYear(defaultFrom.getUTCFullYear() - 1);
+    const from = filters.from ? new Date(`${filters.from}T00:00:00.000Z`) : defaultFrom;
+    const to = filters.to
+      ? new Date(`${filters.to}T23:59:59.999Z`)
+      : now;
+    const thirtyDaysAgo = new Date(to);
     thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
-    const sixtyDaysAgo = new Date(now);
+    const sixtyDaysAgo = new Date(to);
     sixtyDaysAgo.setUTCDate(sixtyDaysAgo.getUTCDate() - 60);
 
-    const [payments, actions] = await Promise.all([
+    const [payments, actions, works] = await Promise.all([
       prisma.payment.findMany({
-        where: { createdAt: { gte: yearAgo } },
+        where: {
+          createdAt: { gte: from, lte: to },
+          workId: filters.workId,
+        },
         include: { work: true, allocations: { include: { work: true } } },
       }),
       prisma.paymentAction.findMany({
-        where: { createdAt: { gte: yearAgo } },
+        where: {
+          createdAt: { gte: from, lte: to },
+          payment: filters.workId ? { workId: filters.workId } : undefined,
+        },
         include: { payment: { select: { createdAt: true } } },
         orderBy: { createdAt: "asc" },
       }),
+      prisma.work.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     ]);
 
     const activePayments = payments.filter(
@@ -80,7 +104,7 @@ export async function GET() {
       const reason = action.reason || "Sem motivo informado";
       rejectionReasons.set(reason, (rejectionReasons.get(reason) ?? 0) + 1);
     }
-    const receiptEligible = activePayments.filter((payment) => payment.currentDueDate <= now);
+    const receiptEligible = activePayments.filter((payment) => payment.currentDueDate <= to);
     const receiptsOnTime = receiptEligible.filter(
       (payment) => payment.hasReceipt && payment.receiptReceivedAt && payment.receiptReceivedAt <= payment.currentDueDate,
     ).length;
@@ -93,6 +117,12 @@ export async function GET() {
         reschedules: actions.filter((action) => action.type === ActionType.TRANSFERIR).length,
         receiptOnTimeRate: receiptEligible.length ? round((receiptsOnTime / receiptEligible.length) * 100) : 0,
         receiptEligible: receiptEligible.length,
+      },
+      filters: {
+        from: from.toISOString(),
+        to: to.toISOString(),
+        workId: filters.workId ?? null,
+        works: works.map((work) => ({ id: work.id, name: work.name })),
       },
       suppliers: [...supplierMap.entries()]
         .map(([name, value]) => ({ name, count: value.count, amount: round(value.amount) }))

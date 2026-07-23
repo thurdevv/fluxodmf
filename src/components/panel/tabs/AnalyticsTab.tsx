@@ -1,6 +1,7 @@
 "use client";
 
 import { BarChart3, Clock3, FileCheck2, RefreshCw, Repeat2 } from "lucide-react";
+import { FormEvent, useState } from "react";
 import { Money } from "@/components/Money";
 import { useFetchData } from "@/components/panel/useFetchData";
 import { money } from "@/lib/format";
@@ -19,26 +20,96 @@ type Analytics = {
   categoryGrowth: Array<{ category: string; current: number; previous: number; growth: number }>;
   rejectionReasons: Array<{ reason: string; count: number }>;
   monthlyByWork: Array<{ month: string; work: string; amount: number }>;
+  filters: {
+    from: string;
+    to: string;
+    workId: string | null;
+    works: Array<{ id: string; name: string }>;
+  };
 };
 
 export function AnalyticsTab() {
-  const { data, error, loading, reload } = useFetchData<Analytics>("/api/analytics");
+  const [draftFilters, setDraftFilters] = useState({ from: "", to: "", workId: "" });
+  const [filters, setFilters] = useState({ from: "", to: "", workId: "" });
+  const parameters = new URLSearchParams(
+    Object.entries(filters).filter(([, value]) => value) as Array<[string, string]>,
+  );
+  const { data, error, loading, reload } = useFetchData<Analytics>(
+    `/api/analytics?${parameters.toString()}`,
+  );
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFilters(draftFilters);
+  }
+
   if (loading) return <div className="panel pad">Calculando indicadores...</div>;
   if (error || !data) return <div className="alert error">{error || "Indicadores indisponíveis."}</div>;
   const maxSupplier = Math.max(...data.suppliers.map((item) => item.amount), 1);
   const months = [...new Set(data.monthlyByWork.map((item) => item.month))].slice(-6);
-
   return (
     <>
       <div className="section-header">
         <div>
           <h2>Visão gerencial</h2>
-          <span className="muted">Últimos 12 meses, com rateios considerados.</span>
+          <span className="muted">Indicadores do período e da obra selecionados.</span>
         </div>
         <button className="button ghost" type="button" onClick={reload}>
           <RefreshCw size={16} /> Atualizar
         </button>
       </div>
+
+      <form className="panel pad toolbar analytics-filters" onSubmit={applyFilters}>
+        <div className="field">
+          <label htmlFor="analytics-from">De</label>
+          <input
+            className="input"
+            id="analytics-from"
+            type="date"
+            value={draftFilters.from}
+            onChange={(event) => setDraftFilters({ ...draftFilters, from: event.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="analytics-to">Até</label>
+          <input
+            className="input"
+            id="analytics-to"
+            type="date"
+            value={draftFilters.to}
+            onChange={(event) => setDraftFilters({ ...draftFilters, to: event.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="analytics-work">Obra</label>
+          <select
+            className="select"
+            id="analytics-work"
+            value={draftFilters.workId}
+            onChange={(event) => setDraftFilters({ ...draftFilters, workId: event.target.value })}
+          >
+            <option value="">Todas as obras</option>
+            {data.filters.works.map((work) => (
+              <option key={work.id} value={work.id}>
+                {work.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-actions">
+          <button className="button" type="submit">Aplicar filtros</button>
+          <button
+            className="button ghost"
+            type="button"
+            onClick={() => {
+              setDraftFilters({ from: "", to: "", workId: "" });
+              setFilters({ from: "", to: "", workId: "" });
+            }}
+          >
+            Limpar
+          </button>
+        </div>
+      </form>
 
       <section className="approval-stats">
         <div className="approval-stat">

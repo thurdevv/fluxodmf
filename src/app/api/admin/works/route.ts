@@ -3,12 +3,13 @@ import { Role, UserStatus } from "@prisma-generated/enums";
 import { auditLog } from "@/lib/audit";
 import { ApiError, handleApiError, ok } from "@/lib/api";
 import { requireTab, requireUser } from "@/lib/auth";
+import { uniqueSlug } from "@/lib/cost-center";
 import { prisma } from "@/lib/db";
 
 const workSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2),
-  slug: z.string().min(2),
+  slug: z.string().min(2).optional(),
   aliases: z.array(z.string()).default([]),
   active: z.boolean().optional(),
   responsibleUserId: z.string().nullable().optional(),
@@ -72,10 +73,13 @@ export async function POST(request: Request) {
     const body = workSchema.parse(await request.json());
 
     await assertResponsibleUser(body.responsibleUserId);
+    const existingSlugs = new Set(
+      (await prisma.work.findMany({ select: { slug: true } })).map((work) => work.slug),
+    );
     const work = await prisma.work.create({
       data: {
         name: body.name,
-        slug: body.slug,
+        slug: body.slug?.trim() || uniqueSlug(body.name, existingSlugs),
         costCenterAliases: JSON.stringify(body.aliases),
         active: body.active ?? true,
         responsibleUserId: body.responsibleUserId ?? null,

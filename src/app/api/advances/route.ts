@@ -52,6 +52,7 @@ export async function GET() {
   try {
     await requireTab("adiantamentos");
     const advances = await prisma.advance.findMany({
+      where: { status: { not: AdvanceStatus.CANCELADO } },
       orderBy: [{ status: "asc" }, { dueDate: "asc" }],
       include: { work: true, createdBy: { select: { id: true, name: true } } },
     });
