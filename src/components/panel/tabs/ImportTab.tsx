@@ -243,23 +243,6 @@ export function ImportTab() {
                 CSV ou XLSX com fornecedor, data, descrição, valor e centro de custo.
               </span>
             </div>
-            <div className="field import-name-field">
-            <label htmlFor="import-name">Nome do fluxo</label>
-            <input
-              className="input"
-              id="import-name"
-              value={importName}
-              onChange={(event) => setImportName(event.target.value)}
-              placeholder={`FLUXO DE PAGAMENTOS ${new Intl.DateTimeFormat("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-              })
-                .format(new Date())
-                .replace("/", ".")}`}
-              maxLength={120}
-            />
-            <small className="muted">Opcional. Em branco, o sistema usa o nome sugerido.</small>
-            </div>
             {file ? <span className="selected-file import-file-name">{file.name}</span> : null}
             <input
               ref={fileInputRef}
@@ -314,6 +297,23 @@ export function ImportTab() {
             modelo <strong>FLUXO DE PAGAMENTOS JFX</strong>. O arquivo bruto não entra direto na
             importação: os nomes das colunas não batem.
           </p>
+          <div className="field">
+            <label htmlFor="import-name">Nome do fluxo gerado</label>
+            <input
+              className="input"
+              id="import-name"
+              value={importName}
+              onChange={(event) => setImportName(event.target.value)}
+              placeholder={`FLUXO DE PAGAMENTOS ${new Intl.DateTimeFormat("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+              })
+                .format(new Date())
+                .replace("/", ".")}`}
+              maxLength={120}
+            />
+            <small className="muted">Opcional. O nome será usado ao importar a planilha convertida.</small>
+          </div>
 
           {rawFile ? <span className="muted import-file-name">{rawFile.name}</span> : null}
 

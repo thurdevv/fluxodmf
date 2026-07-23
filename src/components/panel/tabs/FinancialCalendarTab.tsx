@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useState } from "react";
 import { Money } from "@/components/Money";
 import { useFetchData } from "@/components/panel/useFetchData";
@@ -9,6 +9,13 @@ type CalendarEvent = {
   id: string; type: "PAGAMENTO" | "APORTE" | "ADIANTAMENTO"; date: string;
   title: string; subtitle: string; amount: number; status: string;
   tags: Array<{ id: string; name: string; color: string }>;
+  details?: {
+    description: string;
+    category: string;
+    workName: string;
+    externalReference: string | null;
+    approvedBy: string[];
+  };
 };
 type Response = { events: CalendarEvent[] };
 
@@ -23,6 +30,7 @@ function monthRange(anchor: Date) {
 export function FinancialCalendarTab() {
   const [anchor, setAnchor] = useState(() => new Date());
   const [view, setView] = useState<"month" | "week">("month");
+  const [selectedPayment, setSelectedPayment] = useState<CalendarEvent | null>(null);
   const month = monthRange(anchor);
   const weekStart = new Date(anchor); weekStart.setUTCDate(anchor.getUTCDate() - anchor.getUTCDay());
   const weekEnd = new Date(weekStart); weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
@@ -62,10 +70,67 @@ export function FinancialCalendarTab() {
           {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((label) => <strong className="calendar-weekday" key={label}>{label}</strong>)}
           {days.map((day) => {
             const key = isoDay(day); const dayEvents = events.filter((event) => event.date.slice(0, 10) === key);
-            return <article className={`calendar-day ${day.getUTCMonth() !== anchor.getUTCMonth() && view === "month" ? "outside" : ""}`} key={key}><span className="calendar-number">{day.getUTCDate()}</span>{dayEvents.map((event) => <div className={`calendar-event ${event.type.toLowerCase()}`} key={event.id} title={event.subtitle}><strong>{event.title}</strong><small><Money value={event.amount} /> · {event.type}</small>{event.tags.map((tag) => <i key={tag.id} style={{ background: tag.color }}>{tag.name}</i>)}</div>)}</article>;
+            return (
+              <article
+                className={`calendar-day ${day.getUTCMonth() !== anchor.getUTCMonth() && view === "month" ? "outside" : ""}`}
+                key={key}
+              >
+                <span className="calendar-number">{day.getUTCDate()}</span>
+                {dayEvents.map((event) => {
+                  const isPayment = event.type === "PAGAMENTO";
+                  return (
+                    <button
+                      className={`calendar-event ${event.type.toLowerCase()} ${isPayment ? "clickable" : ""}`}
+                      key={event.id}
+                      type="button"
+                      title={isPayment ? "Abrir detalhes do pagamento" : event.subtitle}
+                      onClick={() => isPayment && setSelectedPayment(event)}
+                      disabled={!isPayment}
+                    >
+                      <strong>{event.title}</strong>
+                      <small><Money value={event.amount} /> · {event.type}</small>
+                      {event.tags.map((tag) => <i key={tag.id} style={{ background: tag.color }}>{tag.name}</i>)}
+                    </button>
+                  );
+                })}
+              </article>
+            );
           })}
         </section>
       )}
+      {selectedPayment ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedPayment(null)}>
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-payment-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-header">
+              <div>
+                <h2 id="calendar-payment-title">{selectedPayment.title}</h2>
+                <span className="muted">Pagamento de {selectedPayment.details?.workName}</span>
+              </div>
+              <button className="icon-button" type="button" aria-label="Fechar detalhes" onClick={() => setSelectedPayment(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="detail-list">
+              <div className="detail-item"><span>Valor</span><strong><Money value={selectedPayment.amount} /></strong></div>
+              <div className="detail-item"><span>Vencimento</span><strong>{new Date(selectedPayment.date).toLocaleDateString("pt-BR", { timeZone: "UTC" })}</strong></div>
+              <div className="detail-item"><span>Categoria</span><strong>{selectedPayment.details?.category}</strong></div>
+              <div className="detail-item"><span>Status</span><strong>{selectedPayment.status}</strong></div>
+              <div className="detail-item">
+                <span>Aprovado por</span>
+                <strong>{selectedPayment.details?.approvedBy.length ? selectedPayment.details.approvedBy.join(", ") : "Ainda não aprovado"}</strong>
+              </div>
+              <div className="detail-item"><span>Descrição</span><strong>{selectedPayment.details?.description}</strong></div>
+              {selectedPayment.details?.externalReference ? <div className="detail-item"><span>Referência</span><strong>{selectedPayment.details.externalReference}</strong></div> : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </>
   );
 }

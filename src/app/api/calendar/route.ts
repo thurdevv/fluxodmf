@@ -27,7 +27,14 @@ export async function GET(request: Request) {
           status: { notIn: [PaymentStatus.REPROVADO, PaymentStatus.CANCELADO] },
         },
         orderBy: { currentDueDate: "asc" },
-        include: { work: true, tags: { include: { tag: true } } },
+        include: {
+          work: true,
+          tags: { include: { tag: true } },
+          approvals: {
+            orderBy: { createdAt: "asc" },
+            include: { actor: { select: { name: true } } },
+          },
+        },
       }),
       prisma.contribution.findMany({
         where: { importBatch: { createdAt: { gte: from, lte: to } } },
@@ -48,6 +55,13 @@ export async function GET(request: Request) {
         amount: numberValue(item.amount),
         status: item.status,
         tags: item.tags.map(({ tag }) => tag),
+        details: {
+          description: item.description,
+          category: item.category || "Sem categoria",
+          workName: item.work.name,
+          externalReference: item.externalReference,
+          approvedBy: item.approvals.map((approval) => approval.actor.name),
+        },
       })),
       ...contributions.map((item) => ({
         id: `contribution-${item.id}`,

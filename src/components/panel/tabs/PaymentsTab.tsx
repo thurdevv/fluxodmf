@@ -466,6 +466,12 @@ export function PaymentsTab() {
               <span className={`status ${flowStatusClasses[selectedFlow.status]}`}>
                 {flowStatusLabels[selectedFlow.status]}
               </span>
+              {selectedFlow.status === "FECHADO" ? (
+                <small className="muted flow-closed-info">
+                  Fechado em {selectedFlow.closedAt ? dateTime(selectedFlow.closedAt) : "-"}
+                  {selectedFlow.closedBy ? ` por ${selectedFlow.closedBy.name}` : ""}.
+                </small>
+              ) : null}
             </div>
             <div className="button-row">
               {selectedFlow.status === "RASCUNHO" ? (
@@ -540,13 +546,13 @@ export function PaymentsTab() {
                 ))}
               </select>
             </div>
-            <span className="muted">
-              {selectedFlow.status === "RASCUNHO"
-                ? "Ajustes e conferências estão liberados."
-                : selectedFlow.status === "EM_APROVACAO"
-                  ? `${selectedFlow.summary.undecidedCount} pagamento(s) aguardando decisão.`
-                  : `Fechado em ${selectedFlow.closedAt ? dateTime(selectedFlow.closedAt) : "-"}. Alterações bloqueadas.`}
-            </span>
+            {selectedFlow.status !== "FECHADO" ? (
+              <span className="muted">
+                {selectedFlow.status === "RASCUNHO"
+                  ? "Ajustes e conferências estão liberados."
+                  : `${selectedFlow.summary.undecidedCount} pagamento(s) aguardando decisão.`}
+              </span>
+            ) : null}
           </div>
 
           {selectedFlow.status === "FECHADO" ? (

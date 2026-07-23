@@ -672,6 +672,20 @@ textarea:disabled {
   min-width: 168px;
 }
 
+
+.analytics-filters {
+  align-items: flex-end;
+}
+
+.analytics-filters .form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.flow-closed-info {
+  display: block;
+  margin-top: 6px;
+}
 .table-wrap {
   overflow-x: auto;
 }
@@ -1172,23 +1186,20 @@ button,
 }
 
 .login-shell {
-  padding: 32px;
+  padding: 0;
   background:
-    radial-gradient(circle at 10% 8%, rgba(139, 91, 227, 0.14), transparent 24%),
-    radial-gradient(circle at 88% 84%, rgba(108, 59, 209, 0.1), transparent 26%),
-    linear-gradient(135deg, #faf9fc 0%, #f2eef9 100%);
+    radial-gradient(circle at 8% 8%, rgba(203, 178, 255, 0.24), transparent 26%),
+    radial-gradient(circle at 92% 88%, rgba(43, 20, 79, 0.38), transparent 30%),
+    linear-gradient(145deg, #29144f 0%, #432080 56%, #5b2bb0 100%);
 }
 
 .login-layout {
-  width: min(100%, 1080px);
-  min-height: 650px;
+  width: 100%;
+  min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(380px, 0.88fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.7fr);
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 28px;
-  background: var(--surface);
-  box-shadow: 0 28px 80px rgba(43, 24, 75, 0.13);
+  background: transparent;
 }
 
 .login-hero {
@@ -2189,13 +2200,16 @@ button,
 }
 
 .calendar-event {
+  width: 100%;
   display: grid;
   gap: 2px;
   margin-bottom: 5px;
   padding: 6px;
+  border: 0;
   border-left: 3px solid var(--primary);
   border-radius: 5px;
   background: #f1edf9;
+  text-align: left;
   font-size: 10px;
 }
 
@@ -2207,6 +2221,11 @@ button,
 .calendar-event.adiantamento {
   border-color: var(--warning);
   background: #fff7e7;
+}
+
+.calendar-event.clickable:hover {
+  box-shadow: 0 3px 10px rgba(67, 32, 128, 0.16);
+  transform: translateY(-1px);
 }
 
 .calendar-event small {

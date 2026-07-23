@@ -300,11 +300,6 @@ export function PanelShell() {
           </nav>
 
           <div className="sidebar-footer">
-            <div className="user-block">
-              <strong>{user.name}</strong>
-              <span>{roleLabels[user.role]}</span>
-              <span>{user.username}</span>
-            </div>
             <button className="button secondary" type="button" onClick={logout}>
               <LogOut size={16} />
               Sair

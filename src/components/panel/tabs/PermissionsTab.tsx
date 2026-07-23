@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { usePanel } from "@/components/panel/PanelContext";
 import type { PanelUserRow } from "@/components/panel/tabs/UsersTab";
 import { useFetchData } from "@/components/panel/useFetchData";
@@ -47,6 +47,7 @@ export function PermissionsTab() {
     useFetchData<ManagedWorksResponse>("/api/admin/works");
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
+  const [newWork, setNewWork] = useState({ name: "", aliases: "", responsibleUserId: "" });
 
   // Solicitacao pendente ainda nao tem perfil definido: so aparece na aba Usuarios.
   const users = (data?.users ?? []).filter((item) => item.status !== "PENDENTE");
@@ -112,6 +113,40 @@ export function PermissionsTab() {
       }
       setMessage(`Responsável de ${work.name} atualizado.`);
       reloadWorks();
+    } catch {
+      setError("Falha de conexão.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function createWork(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusyId("new-work");
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/works", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newWork.name,
+          aliases: newWork.aliases
+            .split(",")
+            .map((alias) => alias.trim())
+            .filter(Boolean),
+          responsibleUserId: newWork.responsibleUserId || null,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setError(body.error ?? "Não foi possível criar a conta.");
+        return;
+      }
+      setNewWork({ name: "", aliases: "", responsibleUserId: "" });
+      setMessage(`Conta ${body.work.name} criada.`);
+      reloadWorks();
+      reload();
     } catch {
       setError("Falha de conexão.");
     } finally {
@@ -256,6 +291,59 @@ export function PermissionsTab() {
             </table>
           </div>
         </div>
+      </section>
+      <section className="section">
+        <div className="section-header">
+          <div>
+            <h2>Adicionar conta manualmente</h2>
+            <span className="muted">Cadastre uma obra antes da importação e defina quem aprova suas solicitações.</span>
+          </div>
+        </div>
+        <form className="panel pad form-grid two" onSubmit={createWork}>
+          <div className="field">
+            <label htmlFor="new-work-name">Nome da conta ou obra</label>
+            <input
+              className="input"
+              id="new-work-name"
+              value={newWork.name}
+              onChange={(event) => setNewWork({ ...newWork, name: event.target.value })}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="new-work-responsible">Responsável pela aprovação</label>
+            <select
+              className="select"
+              id="new-work-responsible"
+              value={newWork.responsibleUserId}
+              onChange={(event) => setNewWork({ ...newWork, responsibleUserId: event.target.value })}
+            >
+              <option value="">Definir depois</option>
+              {users
+                .filter((item) => item.role === Role.GESTOR || item.role === Role.COORDENADOR)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({roleLabels[item.role]})
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="field span-2">
+            <label htmlFor="new-work-aliases">Apelidos usados na planilha</label>
+            <input
+              className="input"
+              id="new-work-aliases"
+              value={newWork.aliases}
+              onChange={(event) => setNewWork({ ...newWork, aliases: event.target.value })}
+              placeholder="Separe os apelidos por vírgula"
+            />
+          </div>
+          <div className="form-actions span-2">
+            <button className="button primary" disabled={busyId === "new-work"}>
+              Adicionar conta
+            </button>
+          </div>
+        </form>
       </section>
       <section className="section">
         <div className="section-header">
